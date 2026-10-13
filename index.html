@@ -25,7 +25,7 @@
 <body class="bg-gray-50 text-gray-800 overflow-x-hidden">
 
   <!-- ======================= 桌面端固定侧边栏 ======================= -->
-  <aside id="sidebar" class="hidden lg:flex fixed left-0 top-0 bottom-0 w-64 flex-col bg-white border-r border-gray-200 z-30">
+  <aside id="sidebar" class="hidden lg:flex fixed left-0 top-0 bottom-0 flex-col bg-white border-r border-gray-200 z-30" style="width: var(--sidebar-w)">
     <div class="px-6 py-6 border-b border-gray-100">
       <h1 class="text-xl font-bold text-primary flex items-center gap-2">📅 课表</h1>
       <p class="text-xs text-gray-400 mt-1">Timetable · 实时同步</p>
@@ -58,10 +58,13 @@
       <span id="sync-dot" class="w-2 h-2 rounded-full bg-gray-300"></span>
       <span id="sync-text">连接中…</span>
     </div>
+
+    <!-- 侧边栏宽度拖拽分隔条 -->
+    <div id="sidebar-resizer" title="拖动调整侧边栏宽度"></div>
   </aside>
 
   <!-- ======================= 主区域 ======================= -->
-  <div class="lg:ml-64 flex flex-col min-h-screen">
+  <div class="main-content flex flex-col min-h-screen">
 
     <!-- 移动端顶部栏 -->
     <header class="lg:hidden sticky top-0 z-30 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
@@ -77,9 +80,13 @@
           <h2 id="desktop-semester-title" class="text-lg font-semibold">课表</h2>
           <span id="desktop-week-hint" class="text-xs text-gray-400">周次见课程卡片标注</span>
         </div>
-        <div class="overflow-auto rounded-xl border border-gray-200 bg-white shadow-sm max-h-[calc(100vh-8rem)]">
-          <div id="day-header" class="grid sticky top-0 bg-gray-50 border-b border-gray-200 z-10"></div>
-          <div id="desktop-grid" class="relative"></div>
+        <div class="relative">
+          <div class="overflow-auto rounded-xl border border-gray-200 bg-white shadow-sm max-h-[calc(100vh-8rem)]">
+            <div id="day-header" class="grid sticky top-0 bg-gray-50 border-b border-gray-200 z-10"></div>
+            <div id="desktop-grid" class="relative"></div>
+          </div>
+          <!-- 课表列宽拖拽手柄 -->
+          <div id="grid-resize-handle" class="grid-resize-handle" title="拖动调整列宽"></div>
         </div>
       </section>
 
