@@ -44,6 +44,12 @@
     </div>
 
     <div class="px-6 mt-4 flex-1 overflow-y-auto">
+      <div class="flex items-center justify-between mb-2">
+        <p class="text-xs text-gray-500 font-medium">📝 待办</p>
+        <button id="btn-add-todo" class="text-xs text-primary font-medium hidden">＋ 添加</button>
+      </div>
+      <div id="todo-list" class="space-y-1.5 mb-5"></div>
+
       <p class="text-xs text-gray-500 font-medium mb-2">节次参考</p>
       <div id="section-times" class="text-xs text-gray-400 space-y-1"></div>
     </div>
@@ -81,6 +87,15 @@
       <section id="mobile-view" class="lg:hidden pb-24">
         <div id="mobile-list"></div>
       </section>
+
+      <!-- 移动端待办视图 -->
+      <section id="mobile-todos-view" class="lg:hidden pb-24 hidden">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-semibold text-sm">📝 待办</h2>
+          <button id="mobile-add-todo" class="text-xs text-primary font-medium hidden">＋ 添加</button>
+        </div>
+        <div id="mobile-todo-list" class="space-y-2"></div>
+      </section>
     </main>
   </div>
 
@@ -91,6 +106,9 @@
     </button>
     <button id="nav-add" class="nav-btn flex-1 py-3 text-xs flex flex-col items-center gap-1 text-gray-400">
       <span class="text-lg leading-none">＋</span>添加
+    </button>
+    <button id="nav-todos" class="nav-btn flex-1 py-3 text-xs flex flex-col items-center gap-1 text-gray-400">
+      <span class="text-lg leading-none">📝</span>待办
     </button>
     <button id="nav-semesters" class="nav-btn flex-1 py-3 text-xs flex flex-col items-center gap-1 text-gray-400">
       <span class="text-lg leading-none">🗓️</span>学期
@@ -211,6 +229,38 @@
           <input id="new-semester-date" type="date" class="form-input w-36" title="开学日期（可选）" />
         </div>
         <button id="btn-create-semester" class="mt-3 w-full rounded-lg bg-primary text-white py-2.5 text-sm font-medium hover:bg-[#2f6be0] transition">创建学期</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================= 添加待办弹窗 ======================= -->
+  <div id="modal-todo" class="modal hidden">
+    <div class="modal-mask" data-close="modal-todo"></div>
+    <div class="modal-panel">
+      <div class="flex items-center justify-between">
+        <h3 class="text-lg font-bold text-gray-900">添加待办</h3>
+        <button class="modal-close" data-close="modal-todo" aria-label="关闭">✕</button>
+      </div>
+
+      <div class="mt-4 space-y-3">
+        <div>
+          <label class="form-label">内容 <span class="text-red-500">*</span></label>
+          <input id="todo-f-content" type="text" placeholder="如：完成高数作业第3章" class="form-input" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="form-label">截止日期（可选）</label>
+            <input id="todo-f-due" type="date" class="form-input" />
+          </div>
+          <div>
+            <label class="form-label">关联课程（可选）</label>
+            <select id="todo-f-course" class="form-input"></select>
+          </div>
+        </div>
+        <div class="flex gap-3 pt-1">
+          <button id="btn-save-todo" class="flex-1 rounded-lg bg-primary text-white py-2.5 text-sm font-medium hover:bg-[#2f6be0] transition">保存</button>
+          <button data-close="modal-todo" class="flex-1 rounded-lg border border-gray-200 bg-white py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">取消</button>
+        </div>
       </div>
     </div>
   </div>
