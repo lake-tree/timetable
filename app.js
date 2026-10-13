@@ -7,6 +7,7 @@
 let sb = null;               // Supabase 客户端实例（避免与 SDK 全局变量 supabase 重名）
 let semesters = [];          // 全部学期
 let courses = [];            // 当前学期的课程
+let todos = [];              // 当前学期的待办
 let currentSemesterId = null;
 let editingCourseId = null;  // 正在编辑的课程 id（null 表示新增）
 let detailCourseId = null;   // 详情弹窗当前课程 id
@@ -117,6 +118,7 @@ function lock() {
   editPwd = null;
   sessionStorage.removeItem('edit_pwd');
   renderAuthUI();
+  renderTodos();
   showToast('已锁定，回到只读模式');
 }
 
@@ -124,6 +126,7 @@ function unlock(pwd) {
   editPwd = pwd;
   sessionStorage.setItem('edit_pwd', pwd);
   renderAuthUI();
+  renderTodos();
 }
 
 function openUnlock() {
@@ -141,6 +144,8 @@ function renderAuthUI() {
   document.getElementById('btn-lock').classList.toggle('hidden', !unlocked);
   document.getElementById('detail-actions').classList.toggle('hidden', !unlocked);
   document.getElementById('detail-lock-hint').classList.toggle('hidden', unlocked);
+  document.getElementById('btn-add-todo').classList.toggle('hidden', !unlocked);
+  document.getElementById('mobile-add-todo').classList.toggle('hidden', !unlocked);
   document.querySelectorAll('.sem-delete').forEach(b => b.classList.toggle('hidden', !unlocked));
 }
 
@@ -174,6 +179,76 @@ async function loadCourses() {
     .eq('semester_id', currentSemesterId);
   if (error) { console.error('loadCourses error:', error); setSyncStatus('error'); return; }
   courses = (data || []).sort((a, b) => a.weekday - b.weekday || a.start_section - b.start_section);
+}
+
+async function loadTodos() {
+  if (!currentSemesterId) { todos = []; return; }
+  try {
+    const { data, error } = await sb
+      .from('todos')
+      .select('*')
+      .eq('semester_id', currentSemesterId);
+    if (error) throw error;
+    todos = data || [];
+  } catch (e) {
+    // todos 表尚未创建等情况：静默降级为空列表，不影响课表
+    console.warn('loadTodos:', e && e.message ? e.message : e);
+    todos = [];
+  }
+}
+
+function courseName(id) {
+  const c = courses.find(x => x.id === id);
+  return c ? c.name : '';
+}
+
+function renderTodos() {
+  const sorted = [...todos].sort((a, b) => {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+    if (a.pinned && b.pinned) return new Date(b.pinned_at || 0) - new Date(a.pinned_at || 0);
+    return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+  });
+  const unlocked = isUnlocked();
+
+  const itemHtml = (t) => {
+    const due = t.due_date ? `📅 ${escapeHtml(t.due_date)}` : '';
+    const cname = t.course_id ? `📚 ${escapeHtml(courseName(t.course_id))}` : '';
+    const meta = [due, cname].filter(Boolean).join(' · ');
+    const checkBtn = unlocked
+      ? `<button class="todo-check" data-act="toggle-done">${t.done ? '✓' : '○'}</button>`
+      : `<span class="todo-check" style="cursor:default">${t.done ? '✓' : '○'}</span>`;
+    const actions = unlocked
+      ? `<button class="todo-pin" data-act="toggle-pin">${t.pinned ? '📌' : '📍'}</button>
+         <button class="todo-del" data-act="delete">🗑</button>`
+      : (t.pinned ? '<span class="todo-pin-static">📌</span>' : '');
+    return `
+      <div class="todo-item ${t.done ? 'done' : ''} ${t.pinned ? 'pinned' : ''}" data-id="${t.id}">
+        ${checkBtn}
+        <div class="todo-main">
+          <div class="todo-content">${escapeHtml(t.content)}</div>
+          ${meta ? `<div class="todo-meta">${meta}</div>` : ''}
+        </div>
+        ${actions}
+      </div>`;
+  };
+
+  const empty = '<div class="text-xs text-gray-300 text-center py-2">暂无待办</div>';
+  document.getElementById('todo-list').innerHTML = sorted.length ? sorted.map(itemHtml).join('') : empty;
+  document.getElementById('mobile-todo-list').innerHTML = sorted.length ? sorted.map(itemHtml).join('') : empty;
+}
+
+function renderTodoCourseOptions() {
+  const sel = document.getElementById('todo-f-course');
+  sel.innerHTML = '<option value="">关联课程（可选）</option>' +
+    courses.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+}
+
+function openTodoModal() {
+  document.getElementById('todo-f-content').value = '';
+  document.getElementById('todo-f-due').value = '';
+  renderTodoCourseOptions();
+  openModal('modal-todo');
+  setTimeout(() => document.getElementById('todo-f-content').focus(), 50);
 }
 
 /* ---------- 渲染 ---------- */
@@ -425,8 +500,8 @@ function handleRealtime(payload) {
       }
       renderSemesterSelectors();
       renderSemesterList();
-      return loadCourses();
-    }).then(renderAll);
+      return Promise.all([loadCourses(), loadTodos()]);
+    }).then(() => { renderAll(); renderTodos(); });
   } else {
     // courses 表变化：直接重新拉取当前学期数据并刷新
     loadCourses().then(renderAll);
@@ -438,6 +513,9 @@ function subscribeRealtime() {
   sb.channel('timetable-realtime')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'courses' }, handleRealtime)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'semesters' }, handleRealtime)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'todos' }, () => {
+      loadTodos().then(renderTodos);
+    })
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') setSyncStatus('connected');
       else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') setSyncStatus('error');
@@ -470,10 +548,12 @@ function bindEvents() {
   document.getElementById('semester-select').addEventListener('change', (e) => {
     currentSemesterId = e.target.value || null;
     loadCourses().then(renderAll);
+    loadTodos().then(renderTodos);
   });
   document.getElementById('semester-select-mobile').addEventListener('change', (e) => {
     currentSemesterId = e.target.value || null;
     loadCourses().then(renderAll);
+    loadTodos().then(renderTodos);
   });
 
   // 添加课程（未解锁则先弹解锁框）
@@ -517,7 +597,74 @@ function bindEvents() {
     renderSemesterList();
     openModal('modal-semesters');
   });
-  document.getElementById('nav-timetable').addEventListener('click', () => setNavActive('nav-timetable'));
+  document.getElementById('nav-timetable').addEventListener('click', () => {
+    setNavActive('nav-timetable');
+    document.getElementById('mobile-view').classList.remove('hidden');
+    document.getElementById('mobile-todos-view').classList.add('hidden');
+  });
+  document.getElementById('nav-todos').addEventListener('click', () => {
+    setNavActive('nav-todos');
+    document.getElementById('mobile-view').classList.add('hidden');
+    document.getElementById('mobile-todos-view').classList.remove('hidden');
+    renderTodos();
+  });
+
+  // 待办：添加
+  document.getElementById('btn-add-todo').addEventListener('click', () => {
+    if (!isUnlocked()) { openUnlock(); return; }
+    openTodoModal();
+  });
+  document.getElementById('mobile-add-todo').addEventListener('click', () => {
+    if (!isUnlocked()) { openUnlock(); return; }
+    openTodoModal();
+  });
+  document.getElementById('btn-save-todo').addEventListener('click', async () => {
+    if (!isUnlocked()) { openUnlock(); return; }
+    const content = document.getElementById('todo-f-content').value.trim();
+    if (!content) { showToast('请输入待办内容'); return; }
+    const due = document.getElementById('todo-f-due').value || null;
+    const cid = document.getElementById('todo-f-course').value || null;
+    const { error } = await sb.rpc('add_todo', {
+      p_pwd: editPwd, p_semester_id: currentSemesterId,
+      p_content: content, p_due_date: due, p_course_id: cid,
+    });
+    if (error) { handleWriteError(error, '添加失败'); return; }
+    closeModal('modal-todo');
+    await loadTodos();
+    renderTodos();
+    showToast('已添加待办');
+  });
+
+  // 待办：勾选完成 / 置顶 / 删除（事件委托）
+  async function handleTodoAction(e) {
+    const btn = e.target.closest('[data-act]');
+    if (!btn) return;
+    const item = btn.closest('.todo-item');
+    const id = item && item.dataset.id;
+    const t = todos.find(x => x.id === id);
+    if (!t) return;
+    if (!isUnlocked()) { openUnlock(); return; }
+    const act = btn.dataset.act;
+    if (act === 'delete') {
+      if (!confirm('删除这条待办？')) return;
+      const { error } = await sb.rpc('delete_todo', { p_pwd: editPwd, p_id: id });
+      if (error) { handleWriteError(error, '删除失败'); return; }
+      showToast('已删除');
+    } else {
+      const done = act === 'toggle-done' ? !t.done : t.done;
+      const pinned = act === 'toggle-pin' ? !t.pinned : t.pinned;
+      const { error } = await sb.rpc('update_todo', {
+        p_pwd: editPwd, p_id: id, p_content: t.content,
+        p_done: done, p_pinned: pinned,
+        p_due_date: t.due_date || null, p_course_id: t.course_id || null,
+      });
+      if (error) { handleWriteError(error, '更新失败'); return; }
+    }
+    await loadTodos();
+    renderTodos();
+  }
+  document.getElementById('todo-list').addEventListener('click', handleTodoAction);
+  document.getElementById('mobile-todo-list').addEventListener('click', handleTodoAction);
 
   // 学期列表：点击切换 / 删除
   document.getElementById('semester-list').addEventListener('click', async (e) => {
@@ -534,6 +681,8 @@ function bindEvents() {
       renderSemesterList();
       await loadCourses();
       renderAll();
+      await loadTodos();
+      renderTodos();
     }
   });
 
@@ -689,8 +838,9 @@ async function init() {
   await loadSemesters();
   currentSemesterId = semesters[0] ? semesters[0].id : null;
   renderSemesterSelectors();
-  if (currentSemesterId) await loadCourses();
+  if (currentSemesterId) { await loadCourses(); await loadTodos(); }
   renderAll();
+  renderTodos();
 
   if (!currentSemesterId) showToast('请先在「学期管理」中创建学期');
 }
