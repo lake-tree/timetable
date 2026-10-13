@@ -15,6 +15,22 @@ html, body {
   .main-content { margin-left: var(--sidebar-w); }
 }
 
+/* 语言切换按钮 */
+.lang-btn {
+  min-width: 34px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #3A7BF9;
+  background: #eef4ff;
+  border: 1px solid #dbe7ff;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+  flex-shrink: 0;
+}
+.lang-btn:hover { background: #3A7BF9; color: #fff; }
+
 /* 侧边栏拖拽分隔条 */
 #sidebar-resizer {
   position: absolute;
