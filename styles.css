@@ -56,9 +56,9 @@ html, body {
   border-right: 1px solid #f1f5f9;
   border-bottom: 1px solid #f1f5f9;
 }
-/* 午休/晚饭分隔线（第4节与第9节之后） */
-.grid-cell[data-section="4"],
-.grid-cell[data-section="8"] {
+/* 午休/晚休分隔线（第5节、第9节之后） */
+.grid-cell[data-section="5"],
+.grid-cell[data-section="9"] {
   border-bottom: 1px solid #e5e7eb;
 }
 

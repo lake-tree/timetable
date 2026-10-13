@@ -14,22 +14,23 @@ window.APP_CONFIG = {
   SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRzaG1hdmZiamZvaWFnanR2ZndxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE4NDAwMDAsImV4cCI6MjEwNzQxNjAwMH0.nRvAsPVhkbZdlTYKxR4OuEvhxlE2foO3s7kZo659Lmk",
 
   // 每天的节次数（与 Supabase 里的课程节次范围对应）
-  SECTION_COUNT: 12,
+  SECTION_COUNT: 13,
 
   // 每节课的名称与时间（用于侧边栏「节次参考」展示，可按需修改）
   SECTION_TIMES: [
     { label: "第1节",  time: "08:00-08:45" },
-    { label: "第2节",  time: "08:55-09:40" },
-    { label: "第3节",  time: "10:00-10:45" },
-    { label: "第4节",  time: "10:55-11:40" },
-    { label: "第5节",  time: "14:00-14:45" },
-    { label: "第6节",  time: "14:55-15:40" },
-    { label: "第7节",  time: "16:00-16:45" },
-    { label: "第8节",  time: "16:55-17:40" },
-    { label: "第9节",  time: "19:00-19:45" },
-    { label: "第10节", time: "19:55-20:40" },
-    { label: "第11节", time: "20:50-21:35" },
-    { label: "第12节", time: "21:45-22:30" },
+    { label: "第2节",  time: "08:50-09:35" },
+    { label: "第3节",  time: "09:50-10:35" },
+    { label: "第4节",  time: "10:40-11:25" },
+    { label: "第5节",  time: "11:30-12:15" },
+    { label: "第6节",  time: "13:00-13:45" },
+    { label: "第7节",  time: "13:50-14:35" },
+    { label: "第8节",  time: "14:45-15:35" },
+    { label: "第9节",  time: "15:45-16:25" },
+    { label: "第10节", time: "17:50-18:25" },
+    { label: "第11节", time: "18:30-19:15" },
+    { label: "第12节", time: "19:20-20:05" },
+    { label: "第13节", time: "20:15-20:55" },
   ],
 
   // 主色
