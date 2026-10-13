@@ -27,6 +27,18 @@ function dayName(n) {
   return WEEKDAYS[(Number(n) || 1) - 1] || '';
 }
 
+// 获取今天日期与星期（weekday: 1=周一 ... 7=周日）
+function todayInfo() {
+  const now = new Date();
+  const jsDay = now.getDay();          // 0=周日, 1=周一 ... 6=周六
+  const weekday = jsDay === 0 ? 7 : jsDay;
+  return {
+    weekday,
+    dateStr: `${now.getMonth() + 1}月${now.getDate()}日`,
+    fullStr: `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`,
+  };
+}
+
 function sectionText(c) {
   return c.start_section === c.end_section
     ? `第${c.start_section}节`
@@ -263,6 +275,7 @@ function renderSectionTimes() {
 function renderDayHeader() {
   const header = document.getElementById('day-header');
   header.style.gridTemplateColumns = '56px repeat(7, minmax(0, 1fr))';
+  const today = todayInfo();
   const corner = document.createElement('div');
   corner.className = 'day-header-cell';
   corner.textContent = '节次';
@@ -270,11 +283,18 @@ function renderDayHeader() {
   const subs = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   WEEKDAYS.forEach((n, i) => {
     const c = document.createElement('div');
-    c.className = 'day-header-cell';
     const isWeekend = i >= 5;
-    c.innerHTML = `<span class="${isWeekend ? 'weekend' : ''}">${n}</span><span class="sub">${subs[i]}</span>`;
+    const isToday = (i + 1) === today.weekday;
+    c.className = 'day-header-cell' + (isToday ? ' today' : '');
+    c.innerHTML = `<span class="${isWeekend ? 'weekend' : ''}">${n}</span>` +
+      (isToday
+        ? `<span class="today-tag">今天</span>`
+        : `<span class="sub">${subs[i]}</span>`);
     header.appendChild(c);
   });
+  // 顶部显示今天日期与星期
+  const hint = document.getElementById('desktop-week-hint');
+  if (hint) hint.textContent = `今天 ${today.fullStr} · ${WEEKDAYS[today.weekday - 1]}`;
 }
 
 function renderDesktopGrid() {
@@ -284,6 +304,14 @@ function renderDesktopGrid() {
   const times = (window.APP_CONFIG && window.APP_CONFIG.SECTION_TIMES) || [];
   grid.style.gridTemplateColumns = '56px repeat(7, minmax(0, 1fr))';
   grid.style.gridAutoRows = '56px';
+
+  // 今天所在的列：淡色高亮条（放在最底层）
+  const today = todayInfo();
+  const band = document.createElement('div');
+  band.className = 'today-column';
+  band.style.gridColumn = String(today.weekday + 1);
+  band.style.gridRow = `1 / ${count + 1}`;
+  grid.appendChild(band);
 
   // 时间列 + 背景网格线
   for (let s = 1; s <= count; s++) {
@@ -325,10 +353,14 @@ function renderDesktopGrid() {
 function renderMobileList() {
   const list = document.getElementById('mobile-list');
   list.innerHTML = '';
-  for (let d = 1; d <= 7; d++) {
+  const today = todayInfo();
+  // 今天的组置顶，其余按周一~周日顺序
+  const order = [today.weekday, ...[1, 2, 3, 4, 5, 6, 7].filter(d => d !== today.weekday)];
+  for (const d of order) {
     const dayCourses = courses.filter(c => c.weekday === d);
     const isWeekend = d >= 6;
-    const accent = isWeekend ? '#E04F5F' : '#3A7BF9';
+    const isToday = d === today.weekday;
+    const accent = isToday ? '#3A7BF9' : (isWeekend ? '#E04F5F' : '#3A7BF9');
 
     let itemsHtml = '';
     if (dayCourses.length === 0) {
@@ -352,11 +384,12 @@ function renderMobileList() {
     }
 
     const group = document.createElement('div');
-    group.className = 'mb-4';
+    group.className = 'mb-4' + (isToday ? ' today-group' : '');
     group.innerHTML = `
       <div class="flex items-center gap-2 mb-2">
         <span class="w-1.5 h-4 rounded-full" style="background:${accent}"></span>
         <span class="font-semibold text-sm ${isWeekend ? 'text-red-400' : ''}">${WEEKDAYS[d - 1]}</span>
+        ${isToday ? `<span class="today-badge">今天 · ${today.dateStr}</span>` : ''}
         <span class="text-xs text-gray-400">${dayCourses.length} 节课</span>
       </div>${itemsHtml}`;
     list.appendChild(group);
