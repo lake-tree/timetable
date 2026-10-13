@@ -14,7 +14,141 @@ let detailCourseId = null;   // 详情弹窗当前课程 id
 let editPwd = null;          // 已解锁的编辑口令（仅存内存/sessionStorage，用于 RPC 校验）
 let colW = null;             // 课表列宽（px；null 表示自适应铺满）
 
-const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+const WEEKDAY_KEYS = ['w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'w7'];
+function weekdayNames() { return WEEKDAY_KEYS.map(k => t(k)); }
+
+/* ---------- 国际化（中英切换，仅界面文字） ---------- */
+const I18N = {
+  zh: {
+    app_title: '课表', app_subtitle: 'Timetable · 实时同步', current_semester: '当前学期',
+    add_course: '＋ 添加课程', unlock_edit: '🔒 解锁编辑', lock_edit: '锁定编辑', manage_semesters: '学期管理',
+    todo_title: '📝 待办', add_todo_btn: '＋ 添加', section_ref: '节次参考', corner: '节次',
+    nav_timetable: '课表', nav_add: '添加', nav_todos: '待办', nav_semesters: '学期',
+    w1: '周一', w2: '周二', w3: '周三', w4: '周四', w5: '周五', w6: '周六', w7: '周日',
+    section: '第{n}节', section_range: '第{a}-{b}节',
+    today_hint: '今天 {date} · {weekday}', today: '今天', today_badge: '今天 · {date}',
+    courses_count: '{n} 节课', no_courses: '暂无课程', no_todos: '暂无待办',
+    sync_connecting: '连接中…', sync_connected: '已连接 · 实时同步中', sync_error: '连接中断',
+    sync_noconfig: '未配置 Supabase，请编辑 config.js',
+    detail_edit: '编辑', detail_delete: '删除', detail_unlock_hint: '🔒 解锁后即可编辑 / 删除',
+    f_teacher: '教师', f_location: '教室', f_time: '时间', f_weeks: '周次', f_note: '备注', all_semester: '全学期',
+    edit_title_add: '添加课程', edit_title_edit: '编辑课程',
+    label_name: '课程名', label_teacher: '教师', label_location: '教室', label_weekday: '星期',
+    label_start: '开始节次', label_end: '结束节次', label_weeks: '周次', label_note: '备注',
+    ignore_conflict: '忽略冲突，仍要保存', save: '保存', cancel: '取消',
+    ph_name: '如：高等数学', ph_teacher: '如：张老师', ph_location: '如：教学楼A-101',
+    ph_weeks: '如 1-16周 / 1-16周(单) / 1,3,5周；留空为全学期', ph_note: '备注信息（可选）',
+    conflict_prefix: '⚠️ 时间冲突：',
+    semester_title: '学期管理', existing_semesters: '已有学期（点击可切换）', new_semester: '新建学期',
+    create_semester: '创建学期', current_tag: '当前', open_day: '开学：', no_semesters: '暂无学期，请先创建',
+    delete_sem: '删除', ph_semester_name: '如：2025-2026学年第一学期',
+    todo_add_title: '添加待办', label_content: '内容', label_due: '截止日期（可选）', label_course: '关联课程（可选）',
+    recurring_label: '🔁 循环任务（每天自动刷新为未完成）', recurring_badge: '🔁 循环',
+    ph_content: '如：完成高数作业第3章',
+    unlock_title: '🔒 解锁编辑', unlock_desc: '当前为访客只读模式，输入编辑口令后才能添加 / 修改 / 删除课程。',
+    ph_password: '请输入编辑口令', unlock: '解锁',
+    toast_enter_password: '请输入口令', toast_wrong_password: '口令错误', toast_unlocked: '已解锁编辑',
+    toast_locked: '已锁定，回到只读模式', toast_updated_rt: '已实时更新',
+    toast_enter_name: '请输入课程名', toast_end_before_start: '结束节次不能早于开始节次',
+    toast_save_fail: '保存失败', toast_delete_fail: '删除失败', toast_create_fail: '创建失败',
+    toast_add_fail: '添加失败', toast_update_fail: '更新失败',
+    toast_added: '已添加', toast_updated: '已更新', toast_deleted: '已删除',
+    toast_semester_created: '学期已创建', toast_semester_deleted: '已删除学期',
+    toast_enter_semester_name: '请输入学期名称', toast_create_semester_first: '请先在「学期管理」中创建学期',
+    toast_enter_todo: '请输入待办内容', toast_todo_added: '已添加待办',
+    confirm_delete_course: '确定删除课程「{name}」吗？', confirm_delete_todo: '删除这条待办？',
+    confirm_delete_semester: '确定删除学期「{name}」吗？该学期下的所有课程也会被删除。',
+    write_error_pwd: '口令错误，已锁定编辑', op_fail: '操作失败',
+    drag_col: '拖动调整列宽', drag_sidebar: '拖动调整侧边栏宽度',
+  },
+  en: {
+    app_title: 'Timetable', app_subtitle: 'Timetable · Realtime sync', current_semester: 'Semester',
+    add_course: '＋ Add course', unlock_edit: '🔒 Unlock edit', lock_edit: 'Lock editing', manage_semesters: 'Semesters',
+    todo_title: '📝 Todos', add_todo_btn: '＋ Add', section_ref: 'Periods', corner: 'Period',
+    nav_timetable: 'Timetable', nav_add: 'Add', nav_todos: 'Todos', nav_semesters: 'Semesters',
+    w1: 'Mon', w2: 'Tue', w3: 'Wed', w4: 'Thu', w5: 'Fri', w6: 'Sat', w7: 'Sun',
+    section: 'P{n}', section_range: 'P{a}-{b}',
+    today_hint: 'Today {date} · {weekday}', today: 'Today', today_badge: 'Today · {date}',
+    courses_count: '{n} courses', no_courses: 'No courses', no_todos: 'No todos',
+    sync_connecting: 'Connecting…', sync_connected: 'Connected · Realtime sync', sync_error: 'Disconnected',
+    sync_noconfig: 'Not configured, edit config.js',
+    detail_edit: 'Edit', detail_delete: 'Delete', detail_unlock_hint: '🔒 Unlock to edit / delete',
+    f_teacher: 'Teacher', f_location: 'Location', f_time: 'Time', f_weeks: 'Weeks', f_note: 'Note', all_semester: 'Whole semester',
+    edit_title_add: 'Add course', edit_title_edit: 'Edit course',
+    label_name: 'Course name', label_teacher: 'Teacher', label_location: 'Location', label_weekday: 'Day',
+    label_start: 'Start period', label_end: 'End period', label_weeks: 'Weeks', label_note: 'Note',
+    ignore_conflict: 'Ignore conflict and save', save: 'Save', cancel: 'Cancel',
+    ph_name: 'e.g. Calculus', ph_teacher: 'e.g. Mr. Zhang', ph_location: 'e.g. Building A-101',
+    ph_weeks: 'e.g. 1-16 / 1-16(odd) / 1,3,5; blank = all weeks', ph_note: 'Optional note',
+    conflict_prefix: '⚠️ Time conflict: ',
+    semester_title: 'Semesters', existing_semesters: 'Semesters (click to switch)', new_semester: 'New semester',
+    create_semester: 'Create semester', current_tag: 'Current', open_day: 'Start: ', no_semesters: 'No semesters yet',
+    delete_sem: 'Delete', ph_semester_name: 'e.g. 2025-2026 Fall',
+    todo_add_title: 'Add todo', label_content: 'Content', label_due: 'Due date (optional)', label_course: 'Related course (optional)',
+    recurring_label: '🔁 Recurring (auto-resets daily)', recurring_badge: '🔁 Recurring',
+    ph_content: 'e.g. Finish chapter 3 homework',
+    unlock_title: '🔒 Unlock edit', unlock_desc: 'Read-only visitor mode. Enter the edit password to add / modify / delete.',
+    ph_password: 'Enter edit password', unlock: 'Unlock',
+    toast_enter_password: 'Enter password', toast_wrong_password: 'Wrong password', toast_unlocked: 'Editing unlocked',
+    toast_locked: 'Locked, back to read-only', toast_updated_rt: 'Updated in real time',
+    toast_enter_name: 'Enter course name', toast_end_before_start: 'End period cannot be before start period',
+    toast_save_fail: 'Save failed', toast_delete_fail: 'Delete failed', toast_create_fail: 'Create failed',
+    toast_add_fail: 'Add failed', toast_update_fail: 'Update failed',
+    toast_added: 'Added', toast_updated: 'Updated', toast_deleted: 'Deleted',
+    toast_semester_created: 'Semester created', toast_semester_deleted: 'Semester deleted',
+    toast_enter_semester_name: 'Enter semester name', toast_create_semester_first: 'Create a semester first',
+    toast_enter_todo: 'Enter todo content', toast_todo_added: 'Todo added',
+    confirm_delete_course: 'Delete course "{name}"?', confirm_delete_todo: 'Delete this todo?',
+    confirm_delete_semester: 'Delete semester "{name}"? All its courses will also be deleted.',
+    write_error_pwd: 'Wrong password, editing locked', op_fail: 'Operation failed',
+    drag_col: 'Drag to resize column width', drag_sidebar: 'Drag to resize sidebar',
+  },
+};
+
+let currentLang = localStorage.getItem('timetable_lang') || 'zh';
+
+function t(key, vars) {
+  let s = (I18N[currentLang] && I18N[currentLang][key]) || I18N.zh[key] || key;
+  if (vars) {
+    Object.keys(vars).forEach(k => { s = s.split('{' + k + '}').join(vars[k]); });
+  }
+  return s;
+}
+
+function formatDateStr(now) {
+  if (currentLang === 'en') {
+    return now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+  return (now.getMonth() + 1) + '月' + now.getDate() + '日';
+}
+
+function applyLanguage() {
+  document.documentElement.lang = currentLang === 'en' ? 'en' : 'zh-CN';
+  document.title = t('app_title') + ' · Timetable';
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.getAttribute('data-i18n'));
+  });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => {
+    el.setAttribute('placeholder', t(el.getAttribute('data-i18n-ph')));
+  });
+  document.querySelectorAll('.lang-btn').forEach(b => {
+    b.textContent = currentLang === 'en' ? '中文' : 'EN';
+  });
+  // 重新渲染动态内容
+  renderDayHeader();
+  renderSectionTimes();
+  renderSemesterSelectors();
+  renderDesktopGrid();
+  renderMobileList();
+  renderTodos();
+  renderSemesterList();
+}
+
+function toggleLang() {
+  currentLang = currentLang === 'zh' ? 'en' : 'zh';
+  localStorage.setItem('timetable_lang', currentLang);
+  applyLanguage();
+}
 
 /* ---------- 工具函数 ---------- */
 function escapeHtml(str) {
@@ -25,7 +159,7 @@ function escapeHtml(str) {
 }
 
 function dayName(n) {
-  return WEEKDAYS[(Number(n) || 1) - 1] || '';
+  return weekdayNames()[(Number(n) || 1) - 1] || '';
 }
 
 // 获取今天日期与星期（weekday: 1=周一 ... 7=周日）
@@ -33,17 +167,13 @@ function todayInfo() {
   const now = new Date();
   const jsDay = now.getDay();          // 0=周日, 1=周一 ... 6=周六
   const weekday = jsDay === 0 ? 7 : jsDay;
-  return {
-    weekday,
-    dateStr: `${now.getMonth() + 1}月${now.getDate()}日`,
-    fullStr: `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`,
-  };
+  return { weekday, dateStr: formatDateStr(now) };
 }
 
 function sectionText(c) {
   return c.start_section === c.end_section
-    ? `第${c.start_section}节`
-    : `第${c.start_section}-${c.end_section}节`;
+    ? t('section', { n: c.start_section })
+    : t('section_range', { a: c.start_section, b: c.end_section });
 }
 
 // 计算课程的时间范围（开始节次的开始时间 ~ 结束节次的结束时间），如 "08:00-09:35"
@@ -97,11 +227,11 @@ function parseWeeks(str) {
 /* ---------- Toast 提示 ---------- */
 let toastTimer = null;
 function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.remove('hidden');
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.remove('hidden');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.add('hidden'), 2200);
+  toastTimer = setTimeout(() => el.classList.add('hidden'), 2200);
 }
 
 /* ---------- 同步状态指示 ---------- */
@@ -110,13 +240,13 @@ function setSyncStatus(state, text) {
   const txt = document.getElementById('sync-text');
   if (state === 'connected') {
     dot.className = 'w-2 h-2 rounded-full connected';
-    txt.textContent = text || '已连接 · 实时同步中';
+    txt.textContent = text || t('sync_connected');
   } else if (state === 'error') {
     dot.className = 'w-2 h-2 rounded-full error';
-    txt.textContent = text || '连接中断';
+    txt.textContent = text || t('sync_error');
   } else {
     dot.className = 'w-2 h-2 rounded-full bg-gray-300';
-    txt.textContent = text || '连接中…';
+    txt.textContent = text || t('sync_connecting');
   }
 }
 
@@ -132,7 +262,7 @@ function lock() {
   sessionStorage.removeItem('edit_pwd');
   renderAuthUI();
   renderTodos();
-  showToast('已锁定，回到只读模式');
+  showToast(t('toast_locked'));
 }
 
 function unlock(pwd) {
@@ -166,9 +296,9 @@ function renderAuthUI() {
 function handleWriteError(err, fallback) {
   if (err && (err.code === '42501' || /口令/.test(err.message || ''))) {
     lock();
-    showToast('口令错误，已锁定编辑');
+    showToast(t('write_error_pwd'));
   } else {
-    showToast((fallback || '操作失败') + '：' + (err && err.message ? err.message : err));
+    showToast((fallback || t('op_fail')) + '：' + (err && err.message ? err.message : err));
   }
 }
 
@@ -235,38 +365,38 @@ function renderTodos() {
   });
   const unlocked = isUnlocked();
 
-  const itemHtml = (t) => {
-    const eff = effectiveDone(t);
-    const due = t.due_date ? `📅 ${escapeHtml(t.due_date)}` : '';
-    const cname = t.course_id ? `📚 ${escapeHtml(courseName(t.course_id))}` : '';
-    const rec = t.recurring ? '🔁 循环' : '';
+  const itemHtml = (todo) => {
+    const eff = effectiveDone(todo);
+    const due = todo.due_date ? `📅 ${escapeHtml(todo.due_date)}` : '';
+    const cname = todo.course_id ? `📚 ${escapeHtml(courseName(todo.course_id))}` : '';
+    const rec = todo.recurring ? t('recurring_badge') : '';
     const meta = [due, cname, rec].filter(Boolean).join(' · ');
     const checkBtn = unlocked
       ? `<button class="todo-check" data-act="toggle-done">${eff ? '✓' : '○'}</button>`
       : `<span class="todo-check" style="cursor:default">${eff ? '✓' : '○'}</span>`;
     const actions = unlocked
-      ? `<button class="todo-pin" data-act="toggle-pin">${t.pinned ? '📌' : '📍'}</button>
+      ? `<button class="todo-pin" data-act="toggle-pin">${todo.pinned ? '📌' : '📍'}</button>
          <button class="todo-del" data-act="delete">🗑</button>`
-      : (t.pinned ? '<span class="todo-pin-static">📌</span>' : '');
+      : (todo.pinned ? '<span class="todo-pin-static">📌</span>' : '');
     return `
-      <div class="todo-item ${eff ? 'done' : ''} ${t.pinned ? 'pinned' : ''}" data-id="${t.id}">
+      <div class="todo-item ${eff ? 'done' : ''} ${todo.pinned ? 'pinned' : ''}" data-id="${todo.id}">
         ${checkBtn}
         <div class="todo-main">
-          <div class="todo-content">${escapeHtml(t.content)}</div>
+          <div class="todo-content">${escapeHtml(todo.content)}</div>
           ${meta ? `<div class="todo-meta">${meta}</div>` : ''}
         </div>
         ${actions}
       </div>`;
   };
 
-  const empty = '<div class="text-xs text-gray-300 text-center py-2">暂无待办</div>';
+  const empty = `<div class="text-xs text-gray-300 text-center py-2">${t('no_todos')}</div>`;
   document.getElementById('todo-list').innerHTML = sorted.length ? sorted.map(itemHtml).join('') : empty;
   document.getElementById('mobile-todo-list').innerHTML = sorted.length ? sorted.map(itemHtml).join('') : empty;
 }
 
 function renderTodoCourseOptions() {
   const sel = document.getElementById('todo-f-course');
-  sel.innerHTML = '<option value="">关联课程（可选）</option>' +
+  sel.innerHTML = `<option value="">${t('label_course')}</option>` +
     courses.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
 }
 
@@ -282,8 +412,8 @@ function openTodoModal() {
 function renderSectionTimes() {
   const box = document.getElementById('section-times');
   const times = (window.APP_CONFIG && window.APP_CONFIG.SECTION_TIMES) || [];
-  box.innerHTML = times.map(t =>
-    `<div class="flex justify-between"><span>${escapeHtml(t.label)}</span><span>${escapeHtml(t.time)}</span></div>`
+  box.innerHTML = times.map((it, i) =>
+    `<div class="flex justify-between"><span>${escapeHtml(t('section', { n: i + 1 }))}</span><span>${escapeHtml(it.time)}</span></div>`
   ).join('');
 }
 
@@ -294,11 +424,11 @@ function gridTemplate() {
 
 // 仅更新表头与网格的列模板（不重建 DOM，用于拖动过程中的实时反馈）
 function setColTemplate() {
-  const t = gridTemplate();
+  const tpl = gridTemplate();
   const h = document.getElementById('day-header');
   const g = document.getElementById('desktop-grid');
-  if (h) h.style.gridTemplateColumns = t;
-  if (g) g.style.gridTemplateColumns = t;
+  if (h) h.style.gridTemplateColumns = tpl;
+  if (g) g.style.gridTemplateColumns = tpl;
 }
 
 function applyColWidth(w) {
@@ -314,27 +444,28 @@ function applySidebarWidth(w) {
 
 function renderDayHeader() {
   const header = document.getElementById('day-header');
+  header.innerHTML = '';
   header.style.gridTemplateColumns = gridTemplate();
   const today = todayInfo();
   const corner = document.createElement('div');
   corner.className = 'day-header-cell';
-  corner.textContent = '节次';
+  corner.textContent = t('corner');
   header.appendChild(corner);
   const subs = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  WEEKDAYS.forEach((n, i) => {
+  weekdayNames().forEach((n, i) => {
     const c = document.createElement('div');
     const isWeekend = i >= 5;
     const isToday = (i + 1) === today.weekday;
     c.className = 'day-header-cell' + (isToday ? ' today' : '');
     c.innerHTML = `<span class="${isWeekend ? 'weekend' : ''}">${n}</span>` +
       (isToday
-        ? `<span class="today-tag">今天</span>`
+        ? `<span class="today-tag">${t('today')}</span>`
         : `<span class="sub">${subs[i]}</span>`);
     header.appendChild(c);
   });
   // 顶部显示今天日期与星期
   const hint = document.getElementById('desktop-week-hint');
-  if (hint) hint.textContent = `今天 ${today.fullStr} · ${WEEKDAYS[today.weekday - 1]}`;
+  if (hint) hint.textContent = t('today_hint', { date: today.dateStr, weekday: weekdayNames()[today.weekday - 1] });
 }
 
 function renderDesktopGrid() {
@@ -355,12 +486,12 @@ function renderDesktopGrid() {
 
   // 时间列 + 背景网格线
   for (let s = 1; s <= count; s++) {
-    const t = times[s - 1] || { label: `第${s}节`, time: '' };
+    const it = times[s - 1] || { time: '' };
     const timeCell = document.createElement('div');
     timeCell.className = 'time-cell';
     timeCell.style.gridColumn = '1';
     timeCell.style.gridRow = String(s);
-    timeCell.innerHTML = `<span class="t">${escapeHtml(t.label)}</span><span class="tm">${escapeHtml(t.time)}</span>`;
+    timeCell.innerHTML = `<span class="t">${escapeHtml(t('section', { n: s }))}</span><span class="tm">${escapeHtml(it.time)}</span>`;
     grid.appendChild(timeCell);
 
     for (let d = 1; d <= 7; d++) {
@@ -396,6 +527,7 @@ function renderMobileList() {
   const today = todayInfo();
   // 今天的组置顶，其余按周一~周日顺序
   const order = [today.weekday, ...[1, 2, 3, 4, 5, 6, 7].filter(d => d !== today.weekday)];
+  const wnames = weekdayNames();
   for (const d of order) {
     const dayCourses = courses.filter(c => c.weekday === d);
     const isWeekend = d >= 6;
@@ -404,7 +536,7 @@ function renderMobileList() {
 
     let itemsHtml = '';
     if (dayCourses.length === 0) {
-      itemsHtml = '<div class="text-xs text-gray-300 text-center py-3">暂无课程</div>';
+      itemsHtml = `<div class="text-xs text-gray-300 text-center py-3">${t('no_courses')}</div>`;
     } else {
       itemsHtml = dayCourses.map(c => `
         <div class="mobile-course-card bg-white rounded-xl border border-gray-200 shadow-sm p-3 mb-2 cursor-pointer"
@@ -428,9 +560,9 @@ function renderMobileList() {
     group.innerHTML = `
       <div class="flex items-center gap-2 mb-2">
         <span class="w-1.5 h-4 rounded-full" style="background:${accent}"></span>
-        <span class="font-semibold text-sm ${isWeekend ? 'text-red-400' : ''}">${WEEKDAYS[d - 1]}</span>
-        ${isToday ? `<span class="today-badge">今天 · ${today.dateStr}</span>` : ''}
-        <span class="text-xs text-gray-400">${dayCourses.length} 节课</span>
+        <span class="font-semibold text-sm ${isWeekend ? 'text-red-400' : ''}">${wnames[d - 1]}</span>
+        ${isToday ? `<span class="today-badge">${t('today_badge', { date: today.dateStr })}</span>` : ''}
+        <span class="text-xs text-gray-400">${t('courses_count', { n: dayCourses.length })}</span>
       </div>${itemsHtml}`;
     list.appendChild(group);
   }
@@ -440,26 +572,26 @@ function renderSemesterSelectors() {
   const opts = semesters.map(s =>
     `<option value="${s.id}" ${s.id === currentSemesterId ? 'selected' : ''}>${escapeHtml(s.name)}</option>`
   ).join('');
-  document.getElementById('semester-select').innerHTML = opts || '<option value="">无学期</option>';
-  document.getElementById('semester-select-mobile').innerHTML = opts || '<option value="">无学期</option>';
+  document.getElementById('semester-select').innerHTML = opts || `<option value="">${t('no_semesters')}</option>`;
+  document.getElementById('semester-select-mobile').innerHTML = opts || `<option value="">${t('no_semesters')}</option>`;
   const cur = semesters.find(s => s.id === currentSemesterId);
-  document.getElementById('desktop-semester-title').textContent = cur ? cur.name : '课表';
+  document.getElementById('desktop-semester-title').textContent = cur ? cur.name : t('app_title');
 }
 
 function renderSemesterList() {
   const box = document.getElementById('semester-list');
   if (semesters.length === 0) {
-    box.innerHTML = '<div class="text-xs text-gray-300 text-center py-3">暂无学期，请先创建</div>';
+    box.innerHTML = `<div class="text-xs text-gray-300 text-center py-3">${t('no_semesters')}</div>`;
     return;
   }
   box.innerHTML = semesters.map(s => `
     <div class="semester-item ${s.id === currentSemesterId ? 'current' : ''}" data-id="${s.id}">
       <div class="flex-1 min-w-0">
         <div class="text-sm font-medium truncate">${escapeHtml(s.name)}</div>
-        ${s.start_date ? `<div class="text-xs text-gray-400">开学：${escapeHtml(s.start_date)}</div>` : ''}
+        ${s.start_date ? `<div class="text-xs text-gray-400">${t('open_day')}${escapeHtml(s.start_date)}</div>` : ''}
       </div>
-      ${s.id === currentSemesterId ? '<span class="text-xs text-primary flex-shrink-0">当前</span>' : ''}
-      <button class="sem-delete text-xs text-red-400 hover:text-red-600 px-2 py-1 flex-shrink-0" data-id="${s.id}">删除</button>
+      ${s.id === currentSemesterId ? `<span class="text-xs text-primary flex-shrink-0">${t('current_tag')}</span>` : ''}
+      <button class="sem-delete text-xs text-red-400 hover:text-red-600 px-2 py-1 flex-shrink-0" data-id="${s.id}">${t('delete_sem')}</button>
     </div>
   `).join('');
   renderAuthUI();
@@ -492,9 +624,9 @@ function findConflicts(course) {
 function showConflictTip(conflicts) {
   const tip = document.getElementById('conflict-tip');
   tip.classList.remove('hidden');
-  tip.innerHTML = '⚠️ 时间冲突：' + conflicts.map(c =>
-    `${escapeHtml(c.name)}（${dayName(c.weekday)} ${sectionText(c)}${c.weeks ? ' ' + escapeHtml(c.weeks) : ''}）`
-  ).join('、');
+  tip.innerHTML = t('conflict_prefix') + conflicts.map(c =>
+    `${escapeHtml(c.name)} (${dayName(c.weekday)} ${sectionText(c)}${c.weeks ? ' ' + escapeHtml(c.weeks) : ''})`
+  ).join(', ');
 }
 
 function hideConflictTip() {
@@ -508,11 +640,11 @@ function openDetail(id) {
   detailCourseId = id;
   document.getElementById('detail-name').textContent = c.name;
   const rows = [
-    ['教师', c.teacher || '—'],
-    ['教室', c.location || '—'],
-    ['时间', `${dayName(c.weekday)} ${sectionText(c)}（${sectionTimeRange(c.start_section, c.end_section)}）`],
-    ['周次', c.weeks || '全学期'],
-    ['备注', c.note || '—'],
+    [t('f_teacher'), c.teacher || '—'],
+    [t('f_location'), c.location || '—'],
+    [t('f_time'), `${dayName(c.weekday)} ${sectionText(c)} (${sectionTimeRange(c.start_section, c.end_section)})`],
+    [t('f_weeks'), c.weeks || t('all_semester')],
+    [t('f_note'), c.note || '—'],
   ];
   document.getElementById('detail-body').innerHTML = rows.map(([k, v]) =>
     `<div class="detail-row"><span class="k">${k}</span><span class="v">${escapeHtml(v)}</span></div>`
@@ -524,19 +656,25 @@ function openDetail(id) {
 /* ---------- 编辑弹窗 ---------- */
 function populateSectionSelects() {
   const count = (window.APP_CONFIG && window.APP_CONFIG.SECTION_COUNT) || 12;
+  const weekdaySel = document.getElementById('f-weekday');
+  const wdVal = weekdaySel.value;
+  weekdaySel.innerHTML = weekdayNames().map((n, i) => `<option value="${i + 1}">${n}</option>`).join('');
+  weekdaySel.value = wdVal || '1';
+
   const start = document.getElementById('f-start');
   const end = document.getElementById('f-end');
+  const sv = start.value, ev = end.value;
   const opts = [];
-  for (let i = 1; i <= count; i++) opts.push(`<option value="${i}">第${i}节</option>`);
+  for (let i = 1; i <= count; i++) opts.push(`<option value="${i}">${t('section', { n: i })}</option>`);
   start.innerHTML = opts;
   end.innerHTML = opts;
-  start.value = '1';
-  end.value = count > 1 ? '2' : '1';
+  start.value = sv || '1';
+  end.value = ev || (count > 1 ? '2' : '1');
 }
 
 function openEdit(course) {
   editingCourseId = course ? course.id : null;
-  document.getElementById('edit-title').textContent = course ? '编辑课程' : '添加课程';
+  document.getElementById('edit-title').textContent = course ? t('edit_title_edit') : t('edit_title_add');
   document.getElementById('f-name').value = course ? course.name : '';
   document.getElementById('f-teacher').value = course ? course.teacher : '';
   document.getElementById('f-location').value = course ? course.location : '';
@@ -579,7 +717,7 @@ function handleRealtime(payload) {
     // courses 表变化：直接重新拉取当前学期数据并刷新
     loadCourses().then(renderAll);
   }
-  showToast('已实时更新');
+  showToast(t('toast_updated_rt'));
 }
 
 function subscribeRealtime() {
@@ -646,19 +784,23 @@ function bindEvents() {
   document.getElementById('btn-lock').addEventListener('click', () => lock());
   document.getElementById('btn-unlock-confirm').addEventListener('click', async () => {
     const pwd = document.getElementById('unlock-password').value;
-    if (!pwd) { showToast('请输入口令'); return; }
+    if (!pwd) { showToast(t('toast_enter_password')); return; }
     const { data, error } = await sb.rpc('verify_edit_password', { p: pwd });
     if (!error && data === true) {
       unlock(pwd);
       closeModal('modal-unlock');
-      showToast('已解锁编辑');
+      showToast(t('toast_unlocked'));
     } else {
-      showToast('口令错误');
+      showToast(t('toast_wrong_password'));
     }
   });
   document.getElementById('unlock-password').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') document.getElementById('btn-unlock-confirm').click();
   });
+
+  // 语言切换
+  document.getElementById('lang-toggle').addEventListener('click', toggleLang);
+  document.getElementById('lang-toggle-mobile').addEventListener('click', toggleLang);
 
   // 学期管理
   document.getElementById('btn-manage-semesters').addEventListener('click', () => {
@@ -694,7 +836,7 @@ function bindEvents() {
   document.getElementById('btn-save-todo').addEventListener('click', async () => {
     if (!isUnlocked()) { openUnlock(); return; }
     const content = document.getElementById('todo-f-content').value.trim();
-    if (!content) { showToast('请输入待办内容'); return; }
+    if (!content) { showToast(t('toast_enter_todo')); return; }
     const due = document.getElementById('todo-f-due').value || null;
     const cid = document.getElementById('todo-f-course').value || null;
     const recurring = document.getElementById('todo-f-recurring').checked;
@@ -702,11 +844,11 @@ function bindEvents() {
       p_pwd: editPwd, p_semester_id: currentSemesterId,
       p_content: content, p_due_date: due, p_course_id: cid, p_recurring: recurring,
     });
-    if (error) { handleWriteError(error, '添加失败'); return; }
+    if (error) { handleWriteError(error, t('toast_add_fail')); return; }
     closeModal('modal-todo');
     await loadTodos();
     renderTodos();
-    showToast('已添加待办');
+    showToast(t('toast_todo_added'));
   });
 
   // 待办：勾选完成 / 置顶 / 删除（事件委托）
@@ -715,23 +857,23 @@ function bindEvents() {
     if (!btn) return;
     const item = btn.closest('.todo-item');
     const id = item && item.dataset.id;
-    const t = todos.find(x => x.id === id);
-    if (!t) return;
+    const todo = todos.find(x => x.id === id);
+    if (!todo) return;
     if (!isUnlocked()) { openUnlock(); return; }
     const act = btn.dataset.act;
     if (act === 'delete') {
-      if (!confirm('删除这条待办？')) return;
+      if (!confirm(t('confirm_delete_todo'))) return;
       const { error } = await sb.rpc('delete_todo', { p_pwd: editPwd, p_id: id });
-      if (error) { handleWriteError(error, '删除失败'); return; }
-      showToast('已删除');
+      if (error) { handleWriteError(error, t('toast_delete_fail')); return; }
+      showToast(t('toast_deleted'));
     } else if (act === 'toggle-done') {
       // 循环任务：按“有效完成态”切换，勾选即记录今天完成时间
-      const eff = effectiveDone(t);
+      const eff = effectiveDone(todo);
       const { error } = await sb.rpc('set_todo_done', { p_pwd: editPwd, p_id: id, p_done: !eff });
-      if (error) { handleWriteError(error, '更新失败'); return; }
+      if (error) { handleWriteError(error, t('toast_update_fail')); return; }
     } else if (act === 'toggle-pin') {
-      const { error } = await sb.rpc('set_todo_pinned', { p_pwd: editPwd, p_id: id, p_pinned: !t.pinned });
-      if (error) { handleWriteError(error, '更新失败'); return; }
+      const { error } = await sb.rpc('set_todo_pinned', { p_pwd: editPwd, p_id: id, p_pinned: !todo.pinned });
+      if (error) { handleWriteError(error, t('toast_update_fail')); return; }
     }
     await loadTodos();
     renderTodos();
@@ -763,10 +905,10 @@ function bindEvents() {
   document.getElementById('btn-create-semester').addEventListener('click', async () => {
     if (!isUnlocked()) { openUnlock(); return; }
     const name = document.getElementById('new-semester-name').value.trim();
-    if (!name) { showToast('请输入学期名称'); return; }
+    if (!name) { showToast(t('toast_enter_semester_name')); return; }
     const start_date = document.getElementById('new-semester-date').value || null;
     const { error } = await sb.rpc('add_semester', { p_pwd: editPwd, p_name: name, p_start_date: start_date });
-    if (error) { handleWriteError(error, '创建失败'); return; }
+    if (error) { handleWriteError(error, t('toast_create_fail')); return; }
     document.getElementById('new-semester-name').value = '';
     document.getElementById('new-semester-date').value = '';
     await loadSemesters();
@@ -775,7 +917,7 @@ function bindEvents() {
     renderSemesterList();
     if (currentSemesterId) await loadCourses();
     renderAll();
-    showToast('学期已创建');
+    showToast(t('toast_semester_created'));
   });
 
   // 详情弹窗：编辑 / 删除（需解锁，删除走口令校验 RPC）
@@ -789,9 +931,9 @@ function bindEvents() {
     if (!isUnlocked()) { openUnlock(); return; }
     const c = courses.find(x => x.id === detailCourseId);
     if (!c) return;
-    if (!confirm(`确定删除课程「${c.name}」吗？`)) return;
+    if (!confirm(t('confirm_delete_course', { name: c.name }))) return;
     const { error } = await sb.rpc('delete_course', { p_pwd: editPwd, p_id: c.id });
-    if (error) { handleWriteError(error, '删除失败'); return; }
+    if (error) { handleWriteError(error, t('toast_delete_fail')); return; }
     closeModal('modal-detail');
     await loadCourses();
     renderAll();
@@ -808,8 +950,8 @@ function bindEvents() {
   document.getElementById('course-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const data = readForm();
-    if (!data.name) { showToast('请填写课程名'); return; }
-    if (data.end_section < data.start_section) { showToast('结束节次不能早于开始节次'); return; }
+    if (!data.name) { showToast(t('toast_enter_name')); return; }
+    if (data.end_section < data.start_section) { showToast(t('toast_end_before_start')); return; }
 
     const conflicts = findConflicts({
       id: editingCourseId,
@@ -848,9 +990,9 @@ function bindEvents() {
       closeModal('modal-edit');
       await loadCourses();
       renderAll();
-      showToast(editingCourseId ? '已更新' : '已添加');
+      showToast(editingCourseId ? t('toast_updated') : t('toast_added'));
     } catch (err) {
-      handleWriteError(err, '保存失败');
+      handleWriteError(err, t('toast_save_fail'));
     }
   });
 
@@ -924,7 +1066,7 @@ async function deleteSemester(id) {
   const s = semesters.find(x => x.id === id);
   if (!s) return;
   if (!isUnlocked()) { openUnlock(); return; }
-  if (!confirm(`确定删除学期「${s.name}」吗？该学期下的所有课程也会被删除。`)) return;
+  if (!confirm(t('confirm_delete_semester', { name: s.name }))) return;
   const { error } = await sb.rpc('delete_semester', { p_pwd: editPwd, p_id: id });
   if (error) { handleWriteError(error, '删除失败'); return; }
   await loadSemesters();
@@ -954,14 +1096,15 @@ async function init() {
   // 恢复编辑口令（同一标签页会话内保持解锁）
   editPwd = sessionStorage.getItem('edit_pwd') || null;
   renderAuthUI();
+  applyLanguage();
 
   // 未配置 Supabase 时的友好提示
   const urlMissing = !cfg.SUPABASE_URL || cfg.SUPABASE_URL.includes('YOUR-PROJECT');
   const keyMissing = !cfg.SUPABASE_ANON_KEY || cfg.SUPABASE_ANON_KEY.includes('YOUR-ANON');
   if (urlMissing || keyMissing || typeof window.supabase === 'undefined') {
-    setSyncStatus('error', '未配置 Supabase，请编辑 config.js');
+    setSyncStatus('error', t('sync_noconfig'));
     renderAll();
-    showToast('请先在 config.js 填写 Supabase URL 与 anon key');
+    showToast(t('sync_noconfig'));
     return;
   }
 
@@ -975,7 +1118,7 @@ async function init() {
   renderAll();
   renderTodos();
 
-  if (!currentSemesterId) showToast('请先在「学期管理」中创建学期');
+  if (!currentSemesterId) showToast(t('toast_create_semester_first'));
 }
 
 document.addEventListener('DOMContentLoaded', init);
