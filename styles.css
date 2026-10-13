@@ -8,6 +8,35 @@ html, body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* ---------- 侧边栏宽度 / 主区域偏移 ---------- */
+:root { --sidebar-w: 256px; }
+.main-content { margin-left: 0; }
+@media (min-width: 1024px) {
+  .main-content { margin-left: var(--sidebar-w); }
+}
+
+/* 侧边栏拖拽分隔条 */
+#sidebar-resizer {
+  position: absolute;
+  top: 0; right: -4px; bottom: 0;
+  width: 9px;
+  cursor: col-resize;
+  z-index: 40;
+}
+#sidebar-resizer:hover,
+#sidebar-resizer.dragging { background: rgba(58, 123, 249, 0.16); }
+
+/* 课表列宽拖拽手柄 */
+.grid-resize-handle {
+  position: absolute;
+  top: 0; right: -5px; bottom: 0;
+  width: 11px;
+  cursor: col-resize;
+  z-index: 20;
+}
+.grid-resize-handle:hover,
+.grid-resize-handle.dragging { background: rgba(58, 123, 249, 0.16); }
+
 /* ---------- 桌面端周视图网格 ---------- */
 #day-header,
 #desktop-grid {
