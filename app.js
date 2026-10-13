@@ -31,6 +31,17 @@ function sectionText(c) {
     : `第${c.start_section}-${c.end_section}节`;
 }
 
+// 计算课程的时间范围（开始节次的开始时间 ~ 结束节次的结束时间），如 "08:00-09:35"
+function sectionTimeRange(start, end) {
+  const times = (window.APP_CONFIG && window.APP_CONFIG.SECTION_TIMES) || [];
+  const a = times[start - 1];
+  const b = times[end - 1];
+  if (!a || !a.time) return '';
+  const s = a.time.split('-')[0];
+  const e = b && b.time ? b.time.split('-')[1] : '';
+  return e ? `${s}-${e}` : a.time;
+}
+
 // 根据课程名生成稳定的卡片颜色
 function colorFor(course) {
   const colors = (window.APP_CONFIG && window.APP_CONFIG.CARD_COLORS) || ['#3A7BF9'];
@@ -184,6 +195,7 @@ function renderDesktopGrid() {
     card.dataset.id = c.id;
     card.innerHTML =
       `<div class="cc-name">${escapeHtml(c.name)}</div>` +
+      `<div class="cc-time">${sectionTimeRange(c.start_section, c.end_section)}</div>` +
       (c.teacher ? `<div class="cc-meta">${escapeHtml(c.teacher)}</div>` : '') +
       (c.location ? `<div class="cc-meta">@${escapeHtml(c.location)}</div>` : '');
     grid.appendChild(card);
@@ -210,6 +222,7 @@ function renderMobileList() {
             <span class="text-xs text-gray-400 flex-shrink-0 ml-2">${sectionText(c)}</span>
           </div>
           <div class="mt-1 text-xs text-gray-500 space-y-0.5">
+            <div>🕐 ${sectionTimeRange(c.start_section, c.end_section)}</div>
             ${c.teacher ? `<div>👨‍🏫 ${escapeHtml(c.teacher)}</div>` : ''}
             ${c.location ? `<div>📍 ${escapeHtml(c.location)}</div>` : ''}
             ${c.weeks ? `<div>📆 ${escapeHtml(c.weeks)}</div>` : ''}
@@ -303,7 +316,7 @@ function openDetail(id) {
   const rows = [
     ['教师', c.teacher || '—'],
     ['教室', c.location || '—'],
-    ['时间', `${dayName(c.weekday)} ${sectionText(c)}`],
+    ['时间', `${dayName(c.weekday)} ${sectionText(c)}（${sectionTimeRange(c.start_section, c.end_section)}）`],
     ['周次', c.weeks || '全学期'],
     ['备注', c.note || '—'],
   ];
