@@ -12,6 +12,7 @@ let currentSemesterId = null;
 let editingCourseId = null;  // 正在编辑的课程 id（null 表示新增）
 let detailCourseId = null;   // 详情弹窗当前课程 id
 let editPwd = null;          // 已解锁的编辑口令（仅存内存/sessionStorage，用于 RPC 校验）
+let colW = null;             // 课表列宽（px；null 表示自适应铺满）
 
 const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
@@ -286,9 +287,34 @@ function renderSectionTimes() {
   ).join('');
 }
 
+// 课表列宽模板：colW 为 null 时自适应铺满，否则固定像素（可横向滚动）
+function gridTemplate() {
+  return `56px repeat(7, ${colW ? colW + 'px' : 'minmax(0, 1fr)'})`;
+}
+
+// 仅更新表头与网格的列模板（不重建 DOM，用于拖动过程中的实时反馈）
+function setColTemplate() {
+  const t = gridTemplate();
+  const h = document.getElementById('day-header');
+  const g = document.getElementById('desktop-grid');
+  if (h) h.style.gridTemplateColumns = t;
+  if (g) g.style.gridTemplateColumns = t;
+}
+
+function applyColWidth(w) {
+  colW = w;
+  setColTemplate();
+  localStorage.setItem('timetable_col_w', String(w));
+}
+
+function applySidebarWidth(w) {
+  document.documentElement.style.setProperty('--sidebar-w', w + 'px');
+  localStorage.setItem('timetable_sidebar_w', String(w));
+}
+
 function renderDayHeader() {
   const header = document.getElementById('day-header');
-  header.style.gridTemplateColumns = '56px repeat(7, minmax(0, 1fr))';
+  header.style.gridTemplateColumns = gridTemplate();
   const today = todayInfo();
   const corner = document.createElement('div');
   corner.className = 'day-header-cell';
@@ -316,7 +342,7 @@ function renderDesktopGrid() {
   grid.innerHTML = '';
   const count = (window.APP_CONFIG && window.APP_CONFIG.SECTION_COUNT) || 12;
   const times = (window.APP_CONFIG && window.APP_CONFIG.SECTION_TIMES) || [];
-  grid.style.gridTemplateColumns = '56px repeat(7, minmax(0, 1fr))';
+  grid.style.gridTemplateColumns = gridTemplate();
   grid.style.gridAutoRows = '56px';
 
   // 今天所在的列：淡色高亮条（放在最底层）
@@ -828,7 +854,61 @@ function bindEvents() {
     }
   });
 
+  bindSidebarResize();
+  bindGridResize();
+
   document.getElementById('btn-cancel-edit').addEventListener('click', () => closeModal('modal-edit'));
+}
+
+// 侧边栏宽度拖拽
+function bindSidebarResize() {
+  const resizer = document.getElementById('sidebar-resizer');
+  if (!resizer) return;
+  let startX = 0, startW = 0;
+  resizer.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    startX = e.clientX;
+    startW = parseInt(getComputedStyle(document.getElementById('sidebar')).width, 10) || 256;
+    resizer.classList.add('dragging');
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+    const onMove = (ev) => applySidebarWidth(Math.min(420, Math.max(180, startW + (ev.clientX - startX))));
+    const onUp = () => {
+      resizer.classList.remove('dragging');
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  });
+}
+
+// 课表列宽拖拽缩放（只调列宽）
+function bindGridResize() {
+  const handle = document.getElementById('grid-resize-handle');
+  if (!handle) return;
+  let startX = 0, startCol = 0;
+  handle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    const cell = document.querySelector('#day-header .day-header-cell:nth-child(2)');
+    startCol = colW || (cell ? cell.getBoundingClientRect().width : 100);
+    startX = e.clientX;
+    handle.classList.add('dragging');
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+    const onMove = (ev) => applyColWidth(Math.min(320, Math.max(60, Math.round(startCol + (ev.clientX - startX)))));
+    const onUp = () => {
+      handle.classList.remove('dragging');
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  });
 }
 
 function setNavActive(id) {
@@ -859,6 +939,12 @@ async function deleteSemester(id) {
 /* ---------- 初始化 ---------- */
 async function init() {
   const cfg = window.APP_CONFIG || {};
+
+  // 恢复 UI 偏好：课表列宽 + 侧边栏宽度（存浏览器本地，非课表数据）
+  const savedColW = parseInt(localStorage.getItem('timetable_col_w'), 10);
+  if (!isNaN(savedColW)) colW = savedColW;
+  const savedSw = parseInt(localStorage.getItem('timetable_sidebar_w'), 10);
+  if (!isNaN(savedSw)) document.documentElement.style.setProperty('--sidebar-w', savedSw + 'px');
 
   populateSectionSelects();
   renderDayHeader();
