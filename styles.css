@@ -34,6 +34,40 @@ html, body {
 .day-header-cell .weekend { color: #E04F5F; }
 .day-header-cell .sub { font-size: 11px; font-weight: 400; color: #9ca3af; }
 
+/* 今天所在列高亮 */
+.day-header-cell.today { background: #3A7BF9; color: #fff; }
+.day-header-cell.today .weekend,
+.day-header-cell.today .sub { color: #fff; }
+.today-tag {
+  font-size: 10px;
+  font-weight: 600;
+  background: #fff;
+  color: #3A7BF9;
+  padding: 0 6px;
+  border-radius: 999px;
+  line-height: 1.5;
+}
+.today-column {
+  background: rgba(58, 123, 249, 0.07);
+  pointer-events: none;
+}
+
+/* 移动端今天的课程组（置顶 + 高亮） */
+.today-group {
+  border: 1px solid #dbe7ff;
+  border-radius: 12px;
+  padding: 8px;
+  background: #f7faff;
+}
+.today-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: #3A7BF9;
+  background: #e8f0ff;
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+
 /* 时间标签列 */
 .time-cell {
   padding: 6px 4px;
