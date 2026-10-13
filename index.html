@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#3A7BF9" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📅</text></svg>" />
+  <title>课表 · Timetable</title>
+
+  <!-- Tailwind CSS（CDN 引入） -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: { primary: "#3A7BF9" },
+        },
+      },
+    };
+  </script>
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body class="bg-gray-50 text-gray-800 overflow-x-hidden">
+
+  <!-- ======================= 桌面端固定侧边栏 ======================= -->
+  <aside id="sidebar" class="hidden lg:flex fixed left-0 top-0 bottom-0 w-64 flex-col bg-white border-r border-gray-200 z-30">
+    <div class="px-6 py-6 border-b border-gray-100">
+      <h1 class="text-xl font-bold text-primary flex items-center gap-2">📅 课表</h1>
+      <p class="text-xs text-gray-400 mt-1">Timetable · 实时同步</p>
+    </div>
+
+    <div class="px-6 py-4">
+      <label class="text-xs text-gray-500 font-medium">当前学期</label>
+      <select id="semester-select" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"></select>
+    </div>
+
+    <div class="px-6 space-y-2">
+      <button id="btn-add" class="w-full rounded-lg bg-primary text-white py-2.5 text-sm font-medium hover:bg-[#2f6be0] transition">＋ 添加课程</button>
+      <button id="btn-manage-semesters" class="w-full rounded-lg border border-gray-200 bg-white py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">学期管理</button>
+    </div>
+
+    <div class="px-6 mt-4 flex-1 overflow-y-auto">
+      <p class="text-xs text-gray-500 font-medium mb-2">节次参考</p>
+      <div id="section-times" class="text-xs text-gray-400 space-y-1"></div>
+    </div>
+
+    <div class="px-6 py-4 border-t border-gray-100 flex items-center gap-2 text-xs text-gray-400">
+      <span id="sync-dot" class="w-2 h-2 rounded-full bg-gray-300"></span>
+      <span id="sync-text">连接中…</span>
+    </div>
+  </aside>
+
+  <!-- ======================= 主区域 ======================= -->
+  <div class="lg:ml-64 flex flex-col min-h-screen">
+
+    <!-- 移动端顶部栏 -->
+    <header class="lg:hidden sticky top-0 z-30 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+      <h1 class="text-lg font-bold text-primary">📅 课表</h1>
+      <select id="semester-select-mobile" class="rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:outline-none"></select>
+    </header>
+
+    <main class="flex-1 p-4 lg:p-6">
+
+      <!-- 桌面端周视图 -->
+      <section id="desktop-view" class="hidden lg:block">
+        <div class="flex items-center justify-between mb-4">
+          <h2 id="desktop-semester-title" class="text-lg font-semibold">课表</h2>
+          <span id="desktop-week-hint" class="text-xs text-gray-400">周次见课程卡片标注</span>
+        </div>
+        <div class="overflow-auto rounded-xl border border-gray-200 bg-white shadow-sm max-h-[calc(100vh-8rem)]">
+          <div id="day-header" class="grid sticky top-0 bg-gray-50 border-b border-gray-200 z-10"></div>
+          <div id="desktop-grid" class="relative"></div>
+        </div>
+      </section>
+
+      <!-- 移动端按星期分组的纵向列表 -->
+      <section id="mobile-view" class="lg:hidden pb-24">
+        <div id="mobile-list"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ======================= 移动端底部导航 ======================= -->
+  <nav class="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-30 flex shadow-[0_-2px_8px_rgba(0,0,0,0.04)]">
+    <button id="nav-timetable" class="nav-btn flex-1 py-3 text-xs flex flex-col items-center gap-1 active text-primary">
+      <span class="text-lg leading-none">📋</span>课表
+    </button>
+    <button id="nav-add" class="nav-btn flex-1 py-3 text-xs flex flex-col items-center gap-1 text-gray-400">
+      <span class="text-lg leading-none">＋</span>添加
+    </button>
+    <button id="nav-semesters" class="nav-btn flex-1 py-3 text-xs flex flex-col items-center gap-1 text-gray-400">
+      <span class="text-lg leading-none">🗓️</span>学期
+    </button>
+  </nav>
+
+  <!-- ======================= 课程详情弹窗 ======================= -->
+  <div id="modal-detail" class="modal hidden">
+    <div class="modal-mask" data-close="modal-detail"></div>
+    <div class="modal-panel">
+      <div class="flex items-start justify-between">
+        <h3 id="detail-name" class="text-lg font-bold text-gray-900"></h3>
+        <button class="modal-close" data-close="modal-detail" aria-label="关闭">✕</button>
+      </div>
+      <div id="detail-body" class="mt-4 space-y-3 text-sm"></div>
+      <div class="mt-6 flex gap-3">
+        <button id="btn-edit-course" class="flex-1 rounded-lg bg-primary text-white py-2.5 text-sm font-medium hover:bg-[#2f6be0] transition">编辑</button>
+        <button id="btn-delete-course" class="flex-1 rounded-lg border border-red-200 text-red-500 py-2.5 text-sm font-medium hover:bg-red-50 transition">删除</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================= 课程编辑弹窗（新增/修改共用） ======================= -->
+  <div id="modal-edit" class="modal hidden">
+    <div class="modal-mask" data-close="modal-edit"></div>
+    <div class="modal-panel">
+      <div class="flex items-center justify-between">
+        <h3 id="edit-title" class="text-lg font-bold text-gray-900">添加课程</h3>
+        <button class="modal-close" data-close="modal-edit" aria-label="关闭">✕</button>
+      </div>
+
+      <form id="course-form" class="mt-4 space-y-3 text-sm">
+        <div>
+          <label class="form-label">课程名 <span class="text-red-500">*</span></label>
+          <input id="f-name" type="text" required placeholder="如：高等数学" class="form-input" />
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="form-label">教师</label>
+            <input id="f-teacher" type="text" placeholder="如：张老师" class="form-input" />
+          </div>
+          <div>
+            <label class="form-label">教室</label>
+            <input id="f-location" type="text" placeholder="如：教学楼A-101" class="form-input" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3">
+          <div>
+            <label class="form-label">星期 <span class="text-red-500">*</span></label>
+            <select id="f-weekday" class="form-input">
+              <option value="1">周一</option>
+              <option value="2">周二</option>
+              <option value="3">周三</option>
+              <option value="4">周四</option>
+              <option value="5">周五</option>
+              <option value="6">周六</option>
+              <option value="7">周日</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label">开始节次 <span class="text-red-500">*</span></label>
+            <select id="f-start" class="form-input"></select>
+          </div>
+          <div>
+            <label class="form-label">结束节次 <span class="text-red-500">*</span></label>
+            <select id="f-end" class="form-input"></select>
+          </div>
+        </div>
+
+        <div>
+          <label class="form-label">周次</label>
+          <input id="f-weeks" type="text" placeholder="如 1-16周 / 1-16周(单) / 1,3,5周；留空为全学期" class="form-input" />
+        </div>
+
+        <div>
+          <label class="form-label">备注</label>
+          <textarea id="f-note" rows="2" placeholder="备注信息（可选）" class="form-input resize-none"></textarea>
+        </div>
+
+        <div id="conflict-tip" class="hidden rounded-lg bg-red-50 border border-red-200 text-red-600 px-3 py-2 text-xs"></div>
+
+        <label class="flex items-center gap-2 text-xs text-gray-500">
+          <input type="checkbox" id="f-ignore-conflict" class="rounded border-gray-300" />
+          忽略冲突，仍要保存
+        </label>
+
+        <div class="flex gap-3 pt-1">
+          <button type="submit" id="btn-save-course" class="flex-1 rounded-lg bg-primary text-white py-2.5 text-sm font-medium hover:bg-[#2f6be0] transition">保存</button>
+          <button type="button" id="btn-cancel-edit" class="flex-1 rounded-lg border border-gray-200 bg-white py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">取消</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ======================= 学期管理弹窗 ======================= -->
+  <div id="modal-semesters" class="modal hidden">
+    <div class="modal-mask" data-close="modal-semesters"></div>
+    <div class="modal-panel">
+      <div class="flex items-center justify-between">
+        <h3 class="text-lg font-bold text-gray-900">学期管理</h3>
+        <button class="modal-close" data-close="modal-semesters" aria-label="关闭">✕</button>
+      </div>
+
+      <div class="mt-4">
+        <p class="text-xs text-gray-500 font-medium mb-2">已有学期（点击可切换）</p>
+        <div id="semester-list" class="space-y-2 max-h-56 overflow-y-auto"></div>
+      </div>
+
+      <div class="mt-5 border-t border-gray-100 pt-4">
+        <p class="text-xs text-gray-500 font-medium mb-2">新建学期</p>
+        <div class="flex gap-2">
+          <input id="new-semester-name" type="text" placeholder="如：2025-2026学年第一学期" class="form-input flex-1" />
+          <input id="new-semester-date" type="date" class="form-input w-36" title="开学日期（可选）" />
+        </div>
+        <button id="btn-create-semester" class="mt-3 w-full rounded-lg bg-primary text-white py-2.5 text-sm font-medium hover:bg-[#2f6be0] transition">创建学期</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================= Toast 提示 ======================= -->
+  <div id="toast" class="hidden fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-sm px-4 py-2.5 rounded-lg shadow-lg whitespace-nowrap"></div>
+
+  <!-- Supabase JS 客户端（CDN 引入） -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
