@@ -214,6 +214,18 @@ function courseName(id) {
   return c ? c.name : '';
 }
 
+// 待办是否“当前有效完成”：循环任务仅在完成当天算完成，跨天自动刷新为未完成
+function effectiveDone(t) {
+  if (!t.recurring) return !!t.done;
+  if (!t.done) return false;
+  const at = t.done_at ? new Date(t.done_at) : null;
+  if (!at) return true; // 旧数据无完成时间，按已完成处理
+  const now = new Date();
+  return at.getFullYear() === now.getFullYear()
+    && at.getMonth() === now.getMonth()
+    && at.getDate() === now.getDate();
+}
+
 function renderTodos() {
   const sorted = [...todos].sort((a, b) => {
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
@@ -223,18 +235,20 @@ function renderTodos() {
   const unlocked = isUnlocked();
 
   const itemHtml = (t) => {
+    const eff = effectiveDone(t);
     const due = t.due_date ? `📅 ${escapeHtml(t.due_date)}` : '';
     const cname = t.course_id ? `📚 ${escapeHtml(courseName(t.course_id))}` : '';
-    const meta = [due, cname].filter(Boolean).join(' · ');
+    const rec = t.recurring ? '🔁 循环' : '';
+    const meta = [due, cname, rec].filter(Boolean).join(' · ');
     const checkBtn = unlocked
-      ? `<button class="todo-check" data-act="toggle-done">${t.done ? '✓' : '○'}</button>`
-      : `<span class="todo-check" style="cursor:default">${t.done ? '✓' : '○'}</span>`;
+      ? `<button class="todo-check" data-act="toggle-done">${eff ? '✓' : '○'}</button>`
+      : `<span class="todo-check" style="cursor:default">${eff ? '✓' : '○'}</span>`;
     const actions = unlocked
       ? `<button class="todo-pin" data-act="toggle-pin">${t.pinned ? '📌' : '📍'}</button>
          <button class="todo-del" data-act="delete">🗑</button>`
       : (t.pinned ? '<span class="todo-pin-static">📌</span>' : '');
     return `
-      <div class="todo-item ${t.done ? 'done' : ''} ${t.pinned ? 'pinned' : ''}" data-id="${t.id}">
+      <div class="todo-item ${eff ? 'done' : ''} ${t.pinned ? 'pinned' : ''}" data-id="${t.id}">
         ${checkBtn}
         <div class="todo-main">
           <div class="todo-content">${escapeHtml(t.content)}</div>
@@ -657,9 +671,10 @@ function bindEvents() {
     if (!content) { showToast('请输入待办内容'); return; }
     const due = document.getElementById('todo-f-due').value || null;
     const cid = document.getElementById('todo-f-course').value || null;
+    const recurring = document.getElementById('todo-f-recurring').checked;
     const { error } = await sb.rpc('add_todo', {
       p_pwd: editPwd, p_semester_id: currentSemesterId,
-      p_content: content, p_due_date: due, p_course_id: cid,
+      p_content: content, p_due_date: due, p_course_id: cid, p_recurring: recurring,
     });
     if (error) { handleWriteError(error, '添加失败'); return; }
     closeModal('modal-todo');
@@ -683,14 +698,13 @@ function bindEvents() {
       const { error } = await sb.rpc('delete_todo', { p_pwd: editPwd, p_id: id });
       if (error) { handleWriteError(error, '删除失败'); return; }
       showToast('已删除');
-    } else {
-      const done = act === 'toggle-done' ? !t.done : t.done;
-      const pinned = act === 'toggle-pin' ? !t.pinned : t.pinned;
-      const { error } = await sb.rpc('update_todo', {
-        p_pwd: editPwd, p_id: id, p_content: t.content,
-        p_done: done, p_pinned: pinned,
-        p_due_date: t.due_date || null, p_course_id: t.course_id || null,
-      });
+    } else if (act === 'toggle-done') {
+      // 循环任务：按“有效完成态”切换，勾选即记录今天完成时间
+      const eff = effectiveDone(t);
+      const { error } = await sb.rpc('set_todo_done', { p_pwd: editPwd, p_id: id, p_done: !eff });
+      if (error) { handleWriteError(error, '更新失败'); return; }
+    } else if (act === 'toggle-pin') {
+      const { error } = await sb.rpc('set_todo_pinned', { p_pwd: editPwd, p_id: id, p_pinned: !t.pinned });
       if (error) { handleWriteError(error, '更新失败'); return; }
     }
     await loadTodos();
