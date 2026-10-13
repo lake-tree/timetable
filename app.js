@@ -10,6 +10,7 @@ let courses = [];            // 当前学期的课程
 let currentSemesterId = null;
 let editingCourseId = null;  // 正在编辑的课程 id（null 表示新增）
 let detailCourseId = null;   // 详情弹窗当前课程 id
+let editPwd = null;          // 已解锁的编辑口令（仅存内存/sessionStorage，用于 RPC 校验）
 
 const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
@@ -108,6 +109,50 @@ function setSyncStatus(state, text) {
 /* ---------- 弹窗 ---------- */
 function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
 function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+/* ---------- 口令解锁（访客只读 + 口令编辑） ---------- */
+function isUnlocked() { return !!editPwd; }
+
+function lock() {
+  editPwd = null;
+  sessionStorage.removeItem('edit_pwd');
+  renderAuthUI();
+  showToast('已锁定，回到只读模式');
+}
+
+function unlock(pwd) {
+  editPwd = pwd;
+  sessionStorage.setItem('edit_pwd', pwd);
+  renderAuthUI();
+}
+
+function openUnlock() {
+  const input = document.getElementById('unlock-password');
+  input.value = '';
+  openModal('modal-unlock');
+  setTimeout(() => input.focus(), 50);
+}
+
+// 根据解锁状态切换增删改入口的显隐
+function renderAuthUI() {
+  const unlocked = isUnlocked();
+  document.getElementById('btn-add').classList.toggle('hidden', !unlocked);
+  document.getElementById('btn-unlock').classList.toggle('hidden', unlocked);
+  document.getElementById('btn-lock').classList.toggle('hidden', !unlocked);
+  document.getElementById('detail-actions').classList.toggle('hidden', !unlocked);
+  document.getElementById('detail-lock-hint').classList.toggle('hidden', unlocked);
+  document.querySelectorAll('.sem-delete').forEach(b => b.classList.toggle('hidden', !unlocked));
+}
+
+// 写操作报错统一处理：口令错误则强制锁定并提示
+function handleWriteError(err, fallback) {
+  if (err && (err.code === '42501' || /口令/.test(err.message || ''))) {
+    lock();
+    showToast('口令错误，已锁定编辑');
+  } else {
+    showToast((fallback || '操作失败') + '：' + (err && err.message ? err.message : err));
+  }
+}
 
 /* ---------- Supabase ---------- */
 function initSupabase() {
@@ -269,6 +314,7 @@ function renderSemesterList() {
       <button class="sem-delete text-xs text-red-400 hover:text-red-600 px-2 py-1 flex-shrink-0" data-id="${s.id}">删除</button>
     </div>
   `).join('');
+  renderAuthUI();
 }
 
 function renderAll() {
@@ -323,6 +369,7 @@ function openDetail(id) {
   document.getElementById('detail-body').innerHTML = rows.map(([k, v]) =>
     `<div class="detail-row"><span class="k">${k}</span><span class="v">${escapeHtml(v)}</span></div>`
   ).join('');
+  renderAuthUI();
   openModal('modal-detail');
 }
 
@@ -429,11 +476,35 @@ function bindEvents() {
     loadCourses().then(renderAll);
   });
 
-  // 添加课程
-  document.getElementById('btn-add').addEventListener('click', () => openEdit(null));
+  // 添加课程（未解锁则先弹解锁框）
+  document.getElementById('btn-add').addEventListener('click', () => {
+    if (!isUnlocked()) { openUnlock(); return; }
+    openEdit(null);
+  });
   document.getElementById('nav-add').addEventListener('click', () => {
     setNavActive('nav-add');
+    if (!isUnlocked()) { openUnlock(); return; }
     openEdit(null);
+  });
+
+  // 解锁 / 锁定
+  document.getElementById('btn-unlock').addEventListener('click', () => openUnlock());
+  document.getElementById('btn-unlock-from-detail').addEventListener('click', () => openUnlock());
+  document.getElementById('btn-lock').addEventListener('click', () => lock());
+  document.getElementById('btn-unlock-confirm').addEventListener('click', async () => {
+    const pwd = document.getElementById('unlock-password').value;
+    if (!pwd) { showToast('请输入口令'); return; }
+    const { data, error } = await sb.rpc('verify_edit_password', { p: pwd });
+    if (!error && data === true) {
+      unlock(pwd);
+      closeModal('modal-unlock');
+      showToast('已解锁编辑');
+    } else {
+      showToast('口令错误');
+    }
+  });
+  document.getElementById('unlock-password').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('btn-unlock-confirm').click();
   });
 
   // 学期管理
@@ -466,13 +537,14 @@ function bindEvents() {
     }
   });
 
-  // 新建学期
+  // 新建学期（需解锁，走口令校验 RPC）
   document.getElementById('btn-create-semester').addEventListener('click', async () => {
+    if (!isUnlocked()) { openUnlock(); return; }
     const name = document.getElementById('new-semester-name').value.trim();
     if (!name) { showToast('请输入学期名称'); return; }
     const start_date = document.getElementById('new-semester-date').value || null;
-    const { error } = await sb.from('semesters').insert([{ name, start_date }]);
-    if (error) { showToast('创建失败：' + error.message); return; }
+    const { error } = await sb.rpc('add_semester', { p_pwd: editPwd, p_name: name, p_start_date: start_date });
+    if (error) { handleWriteError(error, '创建失败'); return; }
     document.getElementById('new-semester-name').value = '';
     document.getElementById('new-semester-date').value = '';
     await loadSemesters();
@@ -484,18 +556,20 @@ function bindEvents() {
     showToast('学期已创建');
   });
 
-  // 详情弹窗：编辑 / 删除
+  // 详情弹窗：编辑 / 删除（需解锁，删除走口令校验 RPC）
   document.getElementById('btn-edit-course').addEventListener('click', () => {
+    if (!isUnlocked()) { openUnlock(); return; }
     const c = courses.find(x => x.id === detailCourseId);
     closeModal('modal-detail');
     if (c) openEdit(c);
   });
   document.getElementById('btn-delete-course').addEventListener('click', async () => {
+    if (!isUnlocked()) { openUnlock(); return; }
     const c = courses.find(x => x.id === detailCourseId);
     if (!c) return;
     if (!confirm(`确定删除课程「${c.name}」吗？`)) return;
-    const { error } = await sb.from('courses').delete().eq('id', c.id);
-    if (error) { showToast('删除失败：' + error.message); return; }
+    const { error } = await sb.rpc('delete_course', { p_pwd: editPwd, p_id: c.id });
+    if (error) { handleWriteError(error, '删除失败'); return; }
     closeModal('modal-detail');
     await loadCourses();
     renderAll();
@@ -532,10 +606,21 @@ function bindEvents() {
 
     try {
       let error;
+      const params = {
+        p_pwd: editPwd,
+        p_name: data.name,
+        p_weekday: data.weekday,
+        p_start: data.start_section,
+        p_end: data.end_section,
+        p_teacher: data.teacher || null,
+        p_location: data.location || null,
+        p_weeks: data.weeks || null,
+        p_note: data.note || null,
+      };
       if (editingCourseId) {
-        ({ error } = await sb.from('courses').update(data).eq('id', editingCourseId));
+        ({ error } = await sb.rpc('update_course', { ...params, p_id: editingCourseId }));
       } else {
-        ({ error } = await sb.from('courses').insert([{ ...data, semester_id: currentSemesterId }]));
+        ({ error } = await sb.rpc('add_course', { ...params, p_semester_id: currentSemesterId }));
       }
       if (error) throw error;
       closeModal('modal-edit');
@@ -543,7 +628,7 @@ function bindEvents() {
       renderAll();
       showToast(editingCourseId ? '已更新' : '已添加');
     } catch (err) {
-      showToast('保存失败：' + err.message);
+      handleWriteError(err, '保存失败');
     }
   });
 
@@ -562,9 +647,10 @@ function setNavActive(id) {
 async function deleteSemester(id) {
   const s = semesters.find(x => x.id === id);
   if (!s) return;
+  if (!isUnlocked()) { openUnlock(); return; }
   if (!confirm(`确定删除学期「${s.name}」吗？该学期下的所有课程也会被删除。`)) return;
-  const { error } = await sb.from('semesters').delete().eq('id', id);
-  if (error) { showToast('删除失败：' + error.message); return; }
+  const { error } = await sb.rpc('delete_semester', { p_pwd: editPwd, p_id: id });
+  if (error) { handleWriteError(error, '删除失败'); return; }
   await loadSemesters();
   if (currentSemesterId === id) currentSemesterId = semesters[0] ? semesters[0].id : null;
   renderSemesterSelectors();
@@ -582,6 +668,10 @@ async function init() {
   renderDayHeader();
   renderSectionTimes();
   bindEvents();
+
+  // 恢复编辑口令（同一标签页会话内保持解锁）
+  editPwd = sessionStorage.getItem('edit_pwd') || null;
+  renderAuthUI();
 
   // 未配置 Supabase 时的友好提示
   const urlMissing = !cfg.SUPABASE_URL || cfg.SUPABASE_URL.includes('YOUR-PROJECT');
