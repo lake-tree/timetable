@@ -7,17 +7,17 @@
         （因此离线时也能看到最近一次加载的课表/待办）
    注意：写操作（POST/RPC）不做缓存，必须联网执行
    ============================================================ */
-const CACHE_NAME = 'timetable-v1';
+const CACHE_NAME = 'timetable-v2';
 const PRECACHE = [
-  '/',
-  '/index.html',
-  '/styles.css',
-  '/config.js',
-  '/app.js',
-  '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png',
-  '/icon-180.png'
+  './',
+  './index.html',
+  './styles.css',
+  './config.js',
+  './app.js',
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png',
+  './icon-180.png'
 ];
 
 self.addEventListener('install', (event) => {
@@ -55,7 +55,7 @@ self.addEventListener('fetch', (event) => {
         caches.match(req, { ignoreVary: true }).then((cached) => {
           if (cached) return cached;
           // 页面导航请求回退到缓存的应用壳
-          if (req.mode === 'navigate') return caches.match('/index.html', { ignoreVary: true });
+          if (req.mode === 'navigate') return caches.match('./index.html', { ignoreVary: true });
           return undefined;
         })
       )
