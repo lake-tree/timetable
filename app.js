@@ -24,7 +24,7 @@ function weekdayNames() { return WEEKDAY_KEYS.map(k => t(k)); }
 const I18N = {
   zh: {
     app_title: '课表', app_subtitle: 'Timetable · 实时同步', current_semester: '当前学期',
-    add_course: '＋ 添加课程', unlock_edit: '🔒 解锁编辑', lock_edit: '锁定编辑', manage_semesters: '学期管理',
+    add_course: '＋ 添加课程', unlock_short: '🔒 解锁', unlocked_short: '🔓 已解锁', manage_semesters: '学期管理',
     todo_title: '📝 待办', add_todo_btn: '＋ 添加', section_ref: '节次参考', corner: '节次',
     nav_timetable: '课表', nav_add: '添加', nav_todos: '待办', nav_semesters: '学期', nav_links: '网站跳转',
     links_title: '🔗 网站跳转', add_link_btn: '＋ 添加', back_timetable: '← 返回课表',
@@ -73,7 +73,7 @@ const I18N = {
   },
   en: {
     app_title: 'Timetable', app_subtitle: 'Timetable · Realtime sync', current_semester: 'Semester',
-    add_course: '＋ Add course', unlock_edit: '🔒 Unlock edit', lock_edit: 'Lock editing', manage_semesters: 'Semesters',
+    add_course: '＋ Add course', unlock_short: '🔒 Unlock', unlocked_short: '🔓 Unlocked', manage_semesters: 'Semesters',
     todo_title: '📝 Todos', add_todo_btn: '＋ Add', section_ref: 'Periods', corner: 'Period',
     nav_timetable: 'Timetable', nav_add: 'Add', nav_todos: 'Todos', nav_semesters: 'Semesters', nav_links: 'Links',
     links_title: '🔗 Links', add_link_btn: '＋ Add', back_timetable: '← Back to timetable',
@@ -304,17 +304,18 @@ function openUnlock() {
 function renderAuthUI() {
   const unlocked = isUnlocked();
   document.getElementById('btn-add').classList.toggle('hidden', !unlocked);
-  document.getElementById('btn-unlock').classList.toggle('hidden', unlocked);
-  document.getElementById('btn-lock').classList.toggle('hidden', !unlocked);
   document.getElementById('detail-actions').classList.toggle('hidden', !unlocked);
-  document.getElementById('detail-lock-hint').classList.toggle('hidden', unlocked);
   document.getElementById('btn-add-todo').classList.toggle('hidden', !unlocked);
   document.getElementById('btn-add-link').classList.toggle('hidden', !unlocked);
-  // 移动端待办页动作：始终显示；未解锁时作为「解锁」入口
-  const ma = document.getElementById('mobile-add-todo');
-  ma.classList.remove('hidden');
-  ma.textContent = unlocked ? t('add_todo_btn') : ('🔒 ' + t('unlock'));
+  document.getElementById('mobile-add-todo').classList.toggle('hidden', !unlocked);
   document.querySelectorAll('.sem-delete').forEach(b => b.classList.toggle('hidden', !unlocked));
+  // 全局锁状态按钮（桌面侧边栏顶部 + 移动端顶部栏）
+  const label = unlocked ? t('unlocked_short') : t('unlock_short');
+  ['btn-lock-toggle', 'btn-lock-toggle-mobile'].forEach(id => {
+    const btn = document.getElementById(id);
+    btn.textContent = label;
+    btn.classList.toggle('unlocked', unlocked);
+  });
 }
 
 // 写操作报错统一处理：口令错误则强制锁定并提示
@@ -880,10 +881,10 @@ function bindEvents() {
     openEdit(null);
   });
 
-  // 解锁 / 锁定
-  document.getElementById('btn-unlock').addEventListener('click', () => openUnlock());
-  document.getElementById('btn-unlock-from-detail').addEventListener('click', () => openUnlock());
-  document.getElementById('btn-lock').addEventListener('click', () => lock());
+  // 解锁 / 锁定（顶部全局状态按钮，两个入口同逻辑）
+  const handleLockToggle = () => { isUnlocked() ? lock() : openUnlock(); };
+  document.getElementById('btn-lock-toggle').addEventListener('click', handleLockToggle);
+  document.getElementById('btn-lock-toggle-mobile').addEventListener('click', handleLockToggle);
   document.getElementById('btn-unlock-confirm').addEventListener('click', async () => {
     const pwd = document.getElementById('unlock-password').value;
     if (!pwd) { showToast(t('toast_enter_password')); return; }
