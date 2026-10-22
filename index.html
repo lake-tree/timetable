@@ -39,7 +39,10 @@
         <h1 class="text-xl font-bold text-primary flex items-center gap-2">📅 <span data-i18n="app_title">课表</span></h1>
         <p class="text-xs text-gray-400 mt-1" data-i18n="app_subtitle">Timetable · 实时同步</p>
       </div>
-      <button id="lang-toggle" class="lang-btn" title="中文 / English">EN</button>
+      <div class="flex items-center gap-2 flex-shrink-0">
+        <button id="btn-lock-toggle" class="lock-toggle" data-i18n="unlock_short">🔒 解锁</button>
+        <button id="lang-toggle" class="lang-btn" title="中文 / English">EN</button>
+      </div>
     </div>
 
     <div class="px-6 py-4">
@@ -49,10 +52,8 @@
 
     <div class="px-6 space-y-2">
       <button id="btn-add" class="w-full rounded-lg bg-primary text-white py-2.5 text-sm font-medium hover:bg-[#2f6be0] transition" data-i18n="add_course">＋ 添加课程</button>
-      <button id="btn-unlock" class="w-full rounded-lg bg-primary text-white py-2.5 text-sm font-medium hover:bg-[#2f6be0] transition hidden" data-i18n="unlock_edit">🔒 解锁编辑</button>
       <button id="btn-manage-semesters" class="w-full rounded-lg border border-gray-200 bg-white py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition" data-i18n="manage_semesters">学期管理</button>
       <button id="btn-links" class="w-full rounded-lg border border-gray-200 bg-white py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition" data-i18n="links_title">🔗 网站跳转</button>
-      <button id="btn-lock" class="w-full rounded-lg border border-gray-200 bg-white py-2 text-xs font-medium text-gray-500 hover:bg-gray-50 transition hidden" data-i18n="lock_edit">锁定编辑</button>
     </div>
 
     <div class="px-6 mt-4 flex-1 overflow-y-auto">
@@ -82,6 +83,7 @@
     <header class="lg:hidden sticky top-0 z-30 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
       <h1 class="text-lg font-bold text-primary">📅 <span data-i18n="app_title">课表</span></h1>
       <div class="flex items-center gap-2">
+        <button id="btn-lock-toggle-mobile" class="lock-toggle" data-i18n="unlock_short">🔒 解锁</button>
         <button id="lang-toggle-mobile" class="lang-btn">EN</button>
         <select id="semester-select-mobile" class="rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:outline-none"></select>
       </div>
@@ -160,9 +162,6 @@
       <div id="detail-actions" class="mt-6 flex gap-3">
         <button id="btn-edit-course" class="flex-1 rounded-lg bg-primary text-white py-2.5 text-sm font-medium hover:bg-[#2f6be0] transition" data-i18n="detail_edit">编辑</button>
         <button id="btn-delete-course" class="flex-1 rounded-lg border border-red-200 text-red-500 py-2.5 text-sm font-medium hover:bg-red-50 transition" data-i18n="detail_delete">删除</button>
-      </div>
-      <div id="detail-lock-hint" class="mt-6 hidden">
-        <button id="btn-unlock-from-detail" class="w-full rounded-lg bg-gray-100 text-gray-600 py-2.5 text-sm font-medium hover:bg-gray-200 transition" data-i18n="detail_unlock_hint">🔒 解锁后即可编辑 / 删除</button>
       </div>
     </div>
   </div>
