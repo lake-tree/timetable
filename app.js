@@ -143,6 +143,7 @@ function applyLanguage() {
   renderMobileList();
   renderTodos();
   renderSemesterList();
+  renderAuthUI();
 }
 
 function toggleLang() {
@@ -289,7 +290,10 @@ function renderAuthUI() {
   document.getElementById('detail-actions').classList.toggle('hidden', !unlocked);
   document.getElementById('detail-lock-hint').classList.toggle('hidden', unlocked);
   document.getElementById('btn-add-todo').classList.toggle('hidden', !unlocked);
-  document.getElementById('mobile-add-todo').classList.toggle('hidden', !unlocked);
+  // 移动端待办页动作：始终显示；未解锁时作为「解锁」入口
+  const ma = document.getElementById('mobile-add-todo');
+  ma.classList.remove('hidden');
+  ma.textContent = unlocked ? t('add_todo_btn') : ('🔒 ' + t('unlock'));
   document.querySelectorAll('.sem-delete').forEach(b => b.classList.toggle('hidden', !unlocked));
 }
 
@@ -870,7 +874,15 @@ function bindEvents() {
   // 待办：勾选完成 / 置顶 / 删除（事件委托）
   async function handleTodoAction(e) {
     const btn = e.target.closest('[data-act]');
-    if (!btn) return;
+    if (!btn) {
+      // 点击待办内容区域（非按钮）也可进入编辑（仅解锁后）
+      const row = e.target.closest('.todo-item');
+      if (row && row.dataset.id && isUnlocked()) {
+        const td = todos.find(x => x.id === row.dataset.id);
+        if (td) openTodoModal(td);
+      }
+      return;
+    }
     const item = btn.closest('.todo-item');
     const id = item && item.dataset.id;
     const todo = todos.find(x => x.id === id);
