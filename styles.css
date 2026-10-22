@@ -326,6 +326,45 @@ html, body {
 .todo-meta { font-size: 11px; color: #9ca3af; margin-top: 2px; word-break: break-all; }
 .todo-pin-static { flex-shrink: 0; font-size: 12px; line-height: 1.3; }
 
+/* ---------- 网站跳转卡片 ---------- */
+.link-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 12px;
+  background: #fff;
+  border: 1px solid #eef0f4;
+  border-top: 3px solid #3A7BF9;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: box-shadow 0.12s ease, transform 0.12s ease;
+  overflow: hidden;
+}
+.link-card:hover { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08); transform: translateY(-1px); }
+.link-initial {
+  width: 34px; height: 34px;
+  border-radius: 9px;
+  color: #fff;
+  font-weight: 700;
+  font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.link-name { font-size: 14px; font-weight: 600; color: #1f2937; word-break: break-all; }
+.link-url {
+  font-size: 11px; color: #9ca3af; word-break: break-all;
+  overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.link-actions { position: absolute; top: 6px; right: 6px; display: flex; gap: 4px; }
+.link-actions button {
+  background: rgba(255, 255, 255, 0.9);
+  border: none; cursor: pointer;
+  font-size: 12px; line-height: 1; padding: 2px 3px; border-radius: 6px; color: #9ca3af;
+}
+.link-actions button:hover { background: #eef4ff; }
+
 /* 滚动条美化 */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 8px; }
