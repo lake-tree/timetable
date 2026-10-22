@@ -13,6 +13,7 @@ let editingCourseId = null;  // 正在编辑的课程 id（null 表示新增）
 let detailCourseId = null;   // 详情弹窗当前课程 id
 let editPwd = null;          // 已解锁的编辑口令（仅存内存/sessionStorage，用于 RPC 校验）
 let colW = null;             // 课表列宽（px；null 表示自适应铺满）
+let editingTodoId = null;    // 正在编辑的待办 id（null 表示新增）
 
 const WEEKDAY_KEYS = ['w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'w7'];
 function weekdayNames() { return WEEKDAY_KEYS.map(k => t(k)); }
@@ -42,7 +43,7 @@ const I18N = {
     semester_title: '学期管理', existing_semesters: '已有学期（点击可切换）', new_semester: '新建学期',
     create_semester: '创建学期', current_tag: '当前', open_day: '开学：', no_semesters: '暂无学期，请先创建',
     delete_sem: '删除', ph_semester_name: '如：2025-2026学年第一学期',
-    todo_add_title: '添加待办', label_content: '内容', label_due: '截止日期（可选）', label_course: '关联课程（可选）',
+    todo_add_title: '添加待办', todo_edit_title: '编辑待办', label_content: '内容', label_due: '截止日期（可选）', label_course: '关联课程（可选）',
     recurring_label: '🔁 循环任务（每天自动刷新为未完成）', recurring_badge: '🔁 循环',
     ph_content: '如：完成高数作业第3章',
     unlock_title: '🔒 解锁编辑', unlock_desc: '当前为访客只读模式，输入编辑口令后才能添加 / 修改 / 删除课程。',
@@ -84,7 +85,7 @@ const I18N = {
     semester_title: 'Semesters', existing_semesters: 'Semesters (click to switch)', new_semester: 'New semester',
     create_semester: 'Create semester', current_tag: 'Current', open_day: 'Start: ', no_semesters: 'No semesters yet',
     delete_sem: 'Delete', ph_semester_name: 'e.g. 2025-2026 Fall',
-    todo_add_title: 'Add todo', label_content: 'Content', label_due: 'Due date (optional)', label_course: 'Related course (optional)',
+    todo_add_title: 'Add todo', todo_edit_title: 'Edit todo', label_content: 'Content', label_due: 'Due date (optional)', label_course: 'Related course (optional)',
     recurring_label: '🔁 Recurring (auto-resets daily)', recurring_badge: '🔁 Recurring',
     ph_content: 'e.g. Finish chapter 3 homework',
     unlock_title: '🔒 Unlock edit', unlock_desc: 'Read-only visitor mode. Enter the edit password to add / modify / delete.',
@@ -375,7 +376,8 @@ function renderTodos() {
       ? `<button class="todo-check" data-act="toggle-done">${eff ? '✓' : '○'}</button>`
       : `<span class="todo-check" style="cursor:default">${eff ? '✓' : '○'}</span>`;
     const actions = unlocked
-      ? `<button class="todo-pin" data-act="toggle-pin">${todo.pinned ? '📌' : '📍'}</button>
+      ? `<button class="todo-edit" data-act="edit">✏️</button>
+         <button class="todo-pin" data-act="toggle-pin">${todo.pinned ? '📌' : '📍'}</button>
          <button class="todo-del" data-act="delete">🗑</button>`
       : (todo.pinned ? '<span class="todo-pin-static">📌</span>' : '');
     return `
@@ -400,10 +402,14 @@ function renderTodoCourseOptions() {
     courses.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
 }
 
-function openTodoModal() {
-  document.getElementById('todo-f-content').value = '';
-  document.getElementById('todo-f-due').value = '';
+function openTodoModal(todo) {
+  editingTodoId = todo ? todo.id : null;
+  document.getElementById('todo-modal-title').textContent = todo ? t('todo_edit_title') : t('todo_add_title');
+  document.getElementById('todo-f-content').value = todo ? todo.content : '';
+  document.getElementById('todo-f-due').value = todo && todo.due_date ? todo.due_date : '';
   renderTodoCourseOptions();
+  document.getElementById('todo-f-course').value = todo && todo.course_id ? todo.course_id : '';
+  document.getElementById('todo-f-recurring').checked = !!(todo && todo.recurring);
   openModal('modal-todo');
   setTimeout(() => document.getElementById('todo-f-content').focus(), 50);
 }
@@ -840,15 +846,25 @@ function bindEvents() {
     const due = document.getElementById('todo-f-due').value || null;
     const cid = document.getElementById('todo-f-course').value || null;
     const recurring = document.getElementById('todo-f-recurring').checked;
-    const { error } = await sb.rpc('add_todo', {
-      p_pwd: editPwd, p_semester_id: currentSemesterId,
-      p_content: content, p_due_date: due, p_course_id: cid, p_recurring: recurring,
-    });
-    if (error) { handleWriteError(error, t('toast_add_fail')); return; }
+    const isEdit = !!editingTodoId;
+    let error;
+    if (isEdit) {
+      ({ error } = await sb.rpc('edit_todo', {
+        p_pwd: editPwd, p_id: editingTodoId,
+        p_content: content, p_due_date: due, p_course_id: cid, p_recurring: recurring,
+      }));
+    } else {
+      ({ error } = await sb.rpc('add_todo', {
+        p_pwd: editPwd, p_semester_id: currentSemesterId,
+        p_content: content, p_due_date: due, p_course_id: cid, p_recurring: recurring,
+      }));
+    }
+    if (error) { handleWriteError(error, isEdit ? t('toast_save_fail') : t('toast_add_fail')); return; }
     closeModal('modal-todo');
+    editingTodoId = null;
     await loadTodos();
     renderTodos();
-    showToast(t('toast_todo_added'));
+    showToast(isEdit ? t('toast_updated') : t('toast_todo_added'));
   });
 
   // 待办：勾选完成 / 置顶 / 删除（事件委托）
@@ -861,6 +877,7 @@ function bindEvents() {
     if (!todo) return;
     if (!isUnlocked()) { openUnlock(); return; }
     const act = btn.dataset.act;
+    if (act === 'edit') { openTodoModal(todo); return; }
     if (act === 'delete') {
       if (!confirm(t('confirm_delete_todo'))) return;
       const { error } = await sb.rpc('delete_todo', { p_pwd: editPwd, p_id: id });
