@@ -8,6 +8,8 @@ let sb = null;               // Supabase 客户端实例（避免与 SDK 全局�
 let semesters = [];          // 全部学期
 let courses = [];            // 当前学期的课程
 let todos = [];              // 当前学期的待办
+let links = [];              // 网站收藏（全局，不分学期）
+let editingLinkId = null;    // 正在编辑的网站 id
 let currentSemesterId = null;
 let editingCourseId = null;  // 正在编辑的课程 id（null 表示新增）
 let detailCourseId = null;   // 详情弹窗当前课程 id
@@ -24,7 +26,14 @@ const I18N = {
     app_title: '课表', app_subtitle: 'Timetable · 实时同步', current_semester: '当前学期',
     add_course: '＋ 添加课程', unlock_edit: '🔒 解锁编辑', lock_edit: '锁定编辑', manage_semesters: '学期管理',
     todo_title: '📝 待办', add_todo_btn: '＋ 添加', section_ref: '节次参考', corner: '节次',
-    nav_timetable: '课表', nav_add: '添加', nav_todos: '待办', nav_semesters: '学期',
+    nav_timetable: '课表', nav_add: '添加', nav_todos: '待办', nav_semesters: '学期', nav_links: '网站跳转',
+    links_title: '🔗 网站跳转', add_link_btn: '＋ 添加', back_timetable: '← 返回课表',
+    link_add_title: '添加网站', link_edit_title: '编辑网站',
+    label_link_name: '名称', label_link_url: '网址',
+    ph_link_name: '如：GitHub', ph_link_url: '如：https://github.com',
+    no_links: '暂无网站，点右上角「添加」',
+    toast_link_added: '已添加网站', toast_link_updated: '已更新网站', toast_link_deleted: '已删除网站',
+    toast_enter_link_name: '请输入名称', toast_enter_link_url: '请输入网址',
     w1: '周一', w2: '周二', w3: '周三', w4: '周四', w5: '周五', w6: '周六', w7: '周日',
     section: '第{n}节', section_range: '第{a}-{b}节',
     today_hint: '今天 {date} · {weekday}', today: '今天', today_badge: '今天 · {date}',
@@ -57,7 +66,7 @@ const I18N = {
     toast_semester_created: '学期已创建', toast_semester_deleted: '已删除学期',
     toast_enter_semester_name: '请输入学期名称', toast_create_semester_first: '请先在「学期管理」中创建学期',
     toast_enter_todo: '请输入待办内容', toast_todo_added: '已添加待办',
-    confirm_delete_course: '确定删除课程「{name}」吗？', confirm_delete_todo: '删除这条待办？',
+    confirm_delete_course: '确定删除课程「{name}」吗？', confirm_delete_todo: '删除这条待办？', confirm_delete_link: '删除这个网站？',
     confirm_delete_semester: '确定删除学期「{name}」吗？该学期下的所有课程也会被删除。',
     write_error_pwd: '口令错误，已锁定编辑', op_fail: '操作失败',
     drag_col: '拖动调整列宽', drag_sidebar: '拖动调整侧边栏宽度',
@@ -66,7 +75,14 @@ const I18N = {
     app_title: 'Timetable', app_subtitle: 'Timetable · Realtime sync', current_semester: 'Semester',
     add_course: '＋ Add course', unlock_edit: '🔒 Unlock edit', lock_edit: 'Lock editing', manage_semesters: 'Semesters',
     todo_title: '📝 Todos', add_todo_btn: '＋ Add', section_ref: 'Periods', corner: 'Period',
-    nav_timetable: 'Timetable', nav_add: 'Add', nav_todos: 'Todos', nav_semesters: 'Semesters',
+    nav_timetable: 'Timetable', nav_add: 'Add', nav_todos: 'Todos', nav_semesters: 'Semesters', nav_links: 'Links',
+    links_title: '🔗 Links', add_link_btn: '＋ Add', back_timetable: '← Back to timetable',
+    link_add_title: 'Add site', link_edit_title: 'Edit site',
+    label_link_name: 'Name', label_link_url: 'URL',
+    ph_link_name: 'e.g. GitHub', ph_link_url: 'e.g. https://github.com',
+    no_links: 'No links yet, tap Add',
+    toast_link_added: 'Site added', toast_link_updated: 'Site updated', toast_link_deleted: 'Site deleted',
+    toast_enter_link_name: 'Enter name', toast_enter_link_url: 'Enter URL',
     w1: 'Mon', w2: 'Tue', w3: 'Wed', w4: 'Thu', w5: 'Fri', w6: 'Sat', w7: 'Sun',
     section: 'P{n}', section_range: 'P{a}-{b}',
     today_hint: 'Today {date} · {weekday}', today: 'Today', today_badge: 'Today · {date}',
@@ -99,7 +115,7 @@ const I18N = {
     toast_semester_created: 'Semester created', toast_semester_deleted: 'Semester deleted',
     toast_enter_semester_name: 'Enter semester name', toast_create_semester_first: 'Create a semester first',
     toast_enter_todo: 'Enter todo content', toast_todo_added: 'Todo added',
-    confirm_delete_course: 'Delete course "{name}"?', confirm_delete_todo: 'Delete this todo?',
+    confirm_delete_course: 'Delete course "{name}"?', confirm_delete_todo: 'Delete this todo?', confirm_delete_link: 'Delete this site?',
     confirm_delete_semester: 'Delete semester "{name}"? All its courses will also be deleted.',
     write_error_pwd: 'Wrong password, editing locked', op_fail: 'Operation failed',
     drag_col: 'Drag to resize column width', drag_sidebar: 'Drag to resize sidebar',
@@ -143,6 +159,7 @@ function applyLanguage() {
   renderMobileList();
   renderTodos();
   renderSemesterList();
+  renderLinks();
   renderAuthUI();
 }
 
@@ -264,6 +281,7 @@ function lock() {
   sessionStorage.removeItem('edit_pwd');
   renderAuthUI();
   renderTodos();
+  renderLinks();
   showToast(t('toast_locked'));
 }
 
@@ -272,6 +290,7 @@ function unlock(pwd) {
   sessionStorage.setItem('edit_pwd', pwd);
   renderAuthUI();
   renderTodos();
+  renderLinks();
 }
 
 function openUnlock() {
@@ -290,6 +309,7 @@ function renderAuthUI() {
   document.getElementById('detail-actions').classList.toggle('hidden', !unlocked);
   document.getElementById('detail-lock-hint').classList.toggle('hidden', unlocked);
   document.getElementById('btn-add-todo').classList.toggle('hidden', !unlocked);
+  document.getElementById('btn-add-link').classList.toggle('hidden', !unlocked);
   // 移动端待办页动作：始终显示；未解锁时作为「解锁」入口
   const ma = document.getElementById('mobile-add-todo');
   ma.classList.remove('hidden');
@@ -348,6 +368,76 @@ async function loadTodos() {
 function courseName(id) {
   const c = courses.find(x => x.id === id);
   return c ? c.name : '';
+}
+
+/* ---------- 网站收藏 ---------- */
+async function loadLinks() {
+  try {
+    const { data, error } = await sb.from('links').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    links = data || [];
+  } catch (e) {
+    console.warn('loadLinks:', e && e.message ? e.message : e);
+    links = [];
+  }
+}
+
+function normalizeUrl(u) {
+  let s = (u || '').trim();
+  if (!s) return '';
+  if (!/^https?:\/\//i.test(s)) s = 'https://' + s;
+  return s;
+}
+
+function linkInitial(name) {
+  return (name || '?').trim().charAt(0).toUpperCase() || '?';
+}
+
+function renderLinks() {
+  const grid = document.getElementById('links-grid');
+  if (!grid) return;
+  const unlocked = isUnlocked();
+  const sorted = [...links].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+  if (sorted.length === 0) {
+    grid.innerHTML = `<div class="col-span-full text-center text-xs text-gray-300 py-8">${t('no_links')}</div>`;
+    return;
+  }
+  grid.innerHTML = sorted.map(l => {
+    const color = colorFor({ name: l.name });
+    const actions = unlocked
+      ? `<div class="link-actions"><button data-act="edit">✏️</button><button data-act="delete">🗑</button></div>`
+      : '';
+    return `
+      <div class="link-card" data-id="${l.id}" data-url="${escapeHtml(l.url)}" style="border-top-color:${color}">
+        <span class="link-initial" style="background:${color}">${escapeHtml(linkInitial(l.name))}</span>
+        <div class="link-name">${escapeHtml(l.name)}</div>
+        <div class="link-url">${escapeHtml(l.url)}</div>
+        ${actions}
+      </div>`;
+  }).join('');
+}
+
+function openLinkModal(link) {
+  editingLinkId = link ? link.id : null;
+  document.getElementById('link-modal-title').textContent = link ? t('link_edit_title') : t('link_add_title');
+  document.getElementById('link-f-name').value = link ? link.name : '';
+  document.getElementById('link-f-url').value = link ? link.url : '';
+  openModal('modal-link');
+  setTimeout(() => document.getElementById('link-f-name').focus(), 50);
+}
+
+// 页面切换（课表 / 待办 / 网站跳转）
+function showPage(page) {
+  const dv = document.getElementById('desktop-view');
+  const mv = document.getElementById('mobile-view');
+  const tv = document.getElementById('mobile-todos-view');
+  const lv = document.getElementById('links-view');
+  if (dv) dv.style.display = (page === 'timetable') ? '' : 'none';
+  if (mv) mv.style.display = (page === 'timetable') ? '' : 'none';
+  if (tv) tv.style.display = (page === 'todos') ? 'block' : 'none';
+  if (lv) lv.style.display = (page === 'links') ? 'block' : 'none';
+  if (page === 'todos') renderTodos();
+  if (page === 'links') renderLinks();
 }
 
 // 待办是否“当前有效完成”：循环任务仅在完成当天算完成，跨天自动刷新为未完成
@@ -737,6 +827,9 @@ function subscribeRealtime() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'todos' }, () => {
       loadTodos().then(renderTodos);
     })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'links' }, () => {
+      loadLinks().then(renderLinks);
+    })
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') setSyncStatus('connected');
       else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') setSyncStatus('error');
@@ -782,8 +875,7 @@ function bindEvents() {
     if (!isUnlocked()) { openUnlock(); return; }
     openEdit(null);
   });
-  document.getElementById('nav-add').addEventListener('click', () => {
-    setNavActive('nav-add');
+  document.getElementById('btn-mobile-add-course').addEventListener('click', () => {
     if (!isUnlocked()) { openUnlock(); return; }
     openEdit(null);
   });
@@ -817,22 +909,15 @@ function bindEvents() {
     renderSemesterList();
     openModal('modal-semesters');
   });
-  document.getElementById('nav-semesters').addEventListener('click', () => {
-    setNavActive('nav-semesters');
+  document.getElementById('btn-mobile-semesters').addEventListener('click', () => {
     renderSemesterList();
     openModal('modal-semesters');
   });
-  document.getElementById('nav-timetable').addEventListener('click', () => {
-    setNavActive('nav-timetable');
-    document.getElementById('mobile-view').classList.remove('hidden');
-    document.getElementById('mobile-todos-view').classList.add('hidden');
-  });
-  document.getElementById('nav-todos').addEventListener('click', () => {
-    setNavActive('nav-todos');
-    document.getElementById('mobile-view').classList.add('hidden');
-    document.getElementById('mobile-todos-view').classList.remove('hidden');
-    renderTodos();
-  });
+  document.getElementById('btn-links').addEventListener('click', () => showPage('links'));
+  document.getElementById('btn-back-timetable').addEventListener('click', () => showPage('timetable'));
+  document.getElementById('nav-timetable').addEventListener('click', () => { setNavActive('nav-timetable'); showPage('timetable'); });
+  document.getElementById('nav-todos').addEventListener('click', () => { setNavActive('nav-todos'); showPage('todos'); });
+  document.getElementById('nav-links').addEventListener('click', () => { setNavActive('nav-links'); showPage('links'); });
 
   // 待办：添加
   document.getElementById('btn-add-todo').addEventListener('click', () => {
@@ -909,6 +994,58 @@ function bindEvents() {
   }
   document.getElementById('todo-list').addEventListener('click', handleTodoAction);
   document.getElementById('mobile-todo-list').addEventListener('click', handleTodoAction);
+
+  // 网站跳转：添加 / 保存 / 卡片点击
+  document.getElementById('btn-add-link').addEventListener('click', () => {
+    if (!isUnlocked()) { openUnlock(); return; }
+    openLinkModal(null);
+  });
+  document.getElementById('btn-save-link').addEventListener('click', async () => {
+    if (!isUnlocked()) { openUnlock(); return; }
+    const name = document.getElementById('link-f-name').value.trim();
+    const url = normalizeUrl(document.getElementById('link-f-url').value);
+    if (!name) { showToast(t('toast_enter_link_name')); return; }
+    if (!url) { showToast(t('toast_enter_link_url')); return; }
+    const isEdit = !!editingLinkId;
+    let error;
+    if (isEdit) {
+      ({ error } = await sb.rpc('update_link', { p_pwd: editPwd, p_id: editingLinkId, p_name: name, p_url: url }));
+    } else {
+      ({ error } = await sb.rpc('add_link', { p_pwd: editPwd, p_name: name, p_url: url }));
+    }
+    if (error) { handleWriteError(error, isEdit ? t('toast_save_fail') : t('toast_add_fail')); return; }
+    closeModal('modal-link');
+    editingLinkId = null;
+    await loadLinks();
+    renderLinks();
+    showToast(isEdit ? t('toast_link_updated') : t('toast_link_added'));
+  });
+  document.getElementById('links-grid').addEventListener('click', async (e) => {
+    const card = e.target.closest('.link-card');
+    if (!card) return;
+    const id = card.dataset.id;
+    const actBtn = e.target.closest('[data-act]');
+    if (actBtn) {
+      e.stopPropagation();
+      const link = links.find(x => x.id === id);
+      if (!link) return;
+      if (!isUnlocked()) { openUnlock(); return; }
+      if (actBtn.dataset.act === 'delete') {
+        if (!confirm(t('confirm_delete_link'))) return;
+        const { error } = await sb.rpc('delete_link', { p_pwd: editPwd, p_id: id });
+        if (error) { handleWriteError(error, t('toast_delete_fail')); return; }
+        await loadLinks();
+        renderLinks();
+        showToast(t('toast_link_deleted'));
+      } else {
+        openLinkModal(link);
+      }
+      return;
+    }
+    // 点击卡片空白处 → 新标签打开网址
+    const url = card.dataset.url;
+    if (url) window.open(url, '_blank', 'noopener');
+  });
 
   // 学期列表：点击切换 / 删除
   document.getElementById('semester-list').addEventListener('click', async (e) => {
@@ -1146,6 +1283,9 @@ async function init() {
   if (currentSemesterId) { await loadCourses(); await loadTodos(); }
   renderAll();
   renderTodos();
+  await loadLinks();
+  renderLinks();
+  showPage('timetable');
 
   if (!currentSemesterId) showToast(t('toast_create_semester_first'));
 }
