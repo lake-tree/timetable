@@ -305,7 +305,7 @@ html, body {
   background: #fff;
 }
 .todo-item.pinned { border-color: #3A7BF9; background: #f0f6ff; }
-.todo-check, .todo-pin, .todo-del {
+.todo-check, .todo-edit, .todo-pin, .todo-del {
   flex-shrink: 0;
   line-height: 1.3;
   font-size: 13px;
@@ -317,6 +317,7 @@ html, body {
 }
 .todo-check { font-weight: 700; }
 .todo-check:hover { color: #12B76A; }
+.todo-edit:hover { color: #3A7BF9; }
 .todo-pin:hover { color: #3A7BF9; }
 .todo-del:hover { color: #E04F5F; }
 .todo-main { flex: 1; min-width: 0; }
