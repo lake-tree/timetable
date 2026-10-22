@@ -51,6 +51,7 @@
       <button id="btn-add" class="w-full rounded-lg bg-primary text-white py-2.5 text-sm font-medium hover:bg-[#2f6be0] transition" data-i18n="add_course">＋ 添加课程</button>
       <button id="btn-unlock" class="w-full rounded-lg bg-primary text-white py-2.5 text-sm font-medium hover:bg-[#2f6be0] transition hidden" data-i18n="unlock_edit">🔒 解锁编辑</button>
       <button id="btn-manage-semesters" class="w-full rounded-lg border border-gray-200 bg-white py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition" data-i18n="manage_semesters">学期管理</button>
+      <button id="btn-links" class="w-full rounded-lg border border-gray-200 bg-white py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition" data-i18n="links_title">🔗 网站跳转</button>
       <button id="btn-lock" class="w-full rounded-lg border border-gray-200 bg-white py-2 text-xs font-medium text-gray-500 hover:bg-gray-50 transition hidden" data-i18n="lock_edit">锁定编辑</button>
     </div>
 
@@ -107,15 +108,29 @@
       <!-- 移动端按星期分组的纵向列表 -->
       <section id="mobile-view" class="lg:hidden pb-24">
         <div id="mobile-list"></div>
+        <div class="flex gap-3 mt-4">
+          <button id="btn-mobile-add-course" class="flex-1 rounded-lg bg-primary text-white py-2.5 text-sm font-medium" data-i18n="add_course">＋ 添加课程</button>
+          <button id="btn-mobile-semesters" class="flex-1 rounded-lg border border-gray-200 bg-white py-2.5 text-sm font-medium text-gray-700" data-i18n="manage_semesters">学期管理</button>
+        </div>
       </section>
 
       <!-- 移动端待办视图 -->
-      <section id="mobile-todos-view" class="lg:hidden pb-24 hidden">
+      <section id="mobile-todos-view" class="lg:hidden pb-24">
         <div class="flex items-center justify-between mb-3">
           <h2 class="font-semibold text-sm" data-i18n="todo_title">📝 待办</h2>
           <button id="mobile-add-todo" class="text-xs text-primary font-medium">＋ 添加</button>
         </div>
         <div id="mobile-todo-list" class="space-y-2"></div>
+      </section>
+
+      <!-- 网站跳转视图 -->
+      <section id="links-view" class="pb-24" style="display:none">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold" data-i18n="links_title">🔗 网站跳转</h2>
+          <button id="btn-add-link" class="text-sm text-primary font-medium hidden" data-i18n="add_link_btn">＋ 添加</button>
+        </div>
+        <button id="btn-back-timetable" class="mb-3 text-xs text-gray-400 hidden lg:inline-block" data-i18n="back_timetable">← 返回课表</button>
+        <div id="links-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3"></div>
       </section>
     </main>
   </div>
@@ -125,14 +140,11 @@
     <button id="nav-timetable" class="nav-btn flex-1 py-3 text-xs flex flex-col items-center gap-1 active text-primary">
       <span class="text-lg leading-none">📋</span><span data-i18n="nav_timetable">课表</span>
     </button>
-    <button id="nav-add" class="nav-btn flex-1 py-3 text-xs flex flex-col items-center gap-1 text-gray-400">
-      <span class="text-lg leading-none">＋</span><span data-i18n="nav_add">添加</span>
-    </button>
     <button id="nav-todos" class="nav-btn flex-1 py-3 text-xs flex flex-col items-center gap-1 text-gray-400">
       <span class="text-lg leading-none">📝</span><span data-i18n="nav_todos">待办</span>
     </button>
-    <button id="nav-semesters" class="nav-btn flex-1 py-3 text-xs flex flex-col items-center gap-1 text-gray-400">
-      <span class="text-lg leading-none">🗓️</span><span data-i18n="nav_semesters">学期</span>
+    <button id="nav-links" class="nav-btn flex-1 py-3 text-xs flex flex-col items-center gap-1 text-gray-400">
+      <span class="text-lg leading-none">🔗</span><span data-i18n="nav_links">网站跳转</span>
     </button>
   </nav>
 
@@ -295,6 +307,31 @@
       <div class="flex gap-3 mt-4">
         <button id="btn-unlock-confirm" class="flex-1 rounded-lg bg-primary text-white py-2.5 text-sm font-medium hover:bg-[#2f6be0] transition" data-i18n="unlock">解锁</button>
         <button data-close="modal-unlock" class="flex-1 rounded-lg border border-gray-200 bg-white py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 transition" data-i18n="cancel">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================= 添加/编辑网站弹窗 ======================= -->
+  <div id="modal-link" class="modal hidden">
+    <div class="modal-mask" data-close="modal-link"></div>
+    <div class="modal-panel">
+      <div class="flex items-center justify-between">
+        <h3 id="link-modal-title" class="text-lg font-bold text-gray-900">添加网站</h3>
+        <button class="modal-close" data-close="modal-link" aria-label="关闭">✕</button>
+      </div>
+      <div class="mt-4 space-y-3">
+        <div>
+          <label class="form-label"><span data-i18n="label_link_name">名称</span> <span class="text-red-500">*</span></label>
+          <input id="link-f-name" type="text" placeholder="如：GitHub" class="form-input" data-i18n-ph="ph_link_name" />
+        </div>
+        <div>
+          <label class="form-label"><span data-i18n="label_link_url">网址</span> <span class="text-red-500">*</span></label>
+          <input id="link-f-url" type="url" placeholder="如：https://github.com" class="form-input" data-i18n-ph="ph_link_url" />
+        </div>
+        <div class="flex gap-3 pt-1">
+          <button id="btn-save-link" class="flex-1 rounded-lg bg-primary text-white py-2.5 text-sm font-medium hover:bg-[#2f6be0] transition" data-i18n="save">保存</button>
+          <button data-close="modal-link" class="flex-1 rounded-lg border border-gray-200 bg-white py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 transition" data-i18n="cancel">取消</button>
+        </div>
       </div>
     </div>
   </div>
