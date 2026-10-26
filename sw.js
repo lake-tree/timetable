@@ -7,7 +7,7 @@
         （因此离线时也能看到最近一次加载的课表/待办）
    注意：写操作（POST/RPC）不做缓存，必须联网执行
    ============================================================ */
-const CACHE_NAME = 'timetable-v5';
+const CACHE_NAME = 'timetable-v6';
 const PRECACHE = [
   './',
   './index.html',
