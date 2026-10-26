@@ -17,6 +17,21 @@ let editPwd = null;          // 已解锁的编辑口令（仅存内存/sessionS
 let colW = null;             // 课表列宽（px；null 表示自适应铺满）
 let editingTodoId = null;    // 正在编辑的待办 id（null 表示新增）
 
+/* ---------- 本地缓存（秒出兜底，云端仍为数据权威） ---------- */
+const CACHE_KEYS = {
+  semesters: 'tt_cache_semesters',
+  courses: 'tt_cache_courses',   // 结构：{ [semesterId]: [course, ...] }
+  todos: 'tt_cache_todos',       // 结构：{ [semesterId]: [todo, ...] }
+  links: 'tt_cache_links',
+};
+function cacheGet(key) {
+  try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : null; }
+  catch (e) { return null; }
+}
+function cacheSet(key, val) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {}
+}
+
 const WEEKDAY_KEYS = ['w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'w7'];
 function weekdayNames() { return WEEKDAY_KEYS.map(k => t(k)); }
 
@@ -338,6 +353,7 @@ async function loadSemesters() {
   const { data, error } = await sb.from('semesters').select('*');
   if (error) { console.error('loadSemesters error:', error); setSyncStatus('error'); return; }
   semesters = data || [];
+  cacheSet(CACHE_KEYS.semesters, semesters);
 }
 
 async function loadCourses() {
@@ -348,6 +364,9 @@ async function loadCourses() {
     .eq('semester_id', currentSemesterId);
   if (error) { console.error('loadCourses error:', error); setSyncStatus('error'); return; }
   courses = (data || []).sort((a, b) => a.weekday - b.weekday || a.start_section - b.start_section);
+  const _all = cacheGet(CACHE_KEYS.courses) || {};
+  _all[currentSemesterId] = courses;
+  cacheSet(CACHE_KEYS.courses, _all);
 }
 
 async function loadTodos() {
@@ -359,6 +378,9 @@ async function loadTodos() {
       .eq('semester_id', currentSemesterId);
     if (error) throw error;
     todos = data || [];
+    const _all = cacheGet(CACHE_KEYS.todos) || {};
+    _all[currentSemesterId] = todos;
+    cacheSet(CACHE_KEYS.todos, _all);
   } catch (e) {
     // todos 表尚未创建等情况：静默降级为空列表，不影响课表
     console.warn('loadTodos:', e && e.message ? e.message : e);
@@ -377,6 +399,7 @@ async function loadLinks() {
     const { data, error } = await sb.from('links').select('*').order('created_at', { ascending: false });
     if (error) throw error;
     links = data || [];
+    cacheSet(CACHE_KEYS.links, links);
   } catch (e) {
     console.warn('loadLinks:', e && e.message ? e.message : e);
     links = [];
@@ -1278,6 +1301,25 @@ async function init() {
   initSupabase();
   subscribeRealtime();
 
+  // 1) 先用本地缓存立即渲染，秒出，避免冷启动/断网时长时间空白
+  const cachedSemesters = cacheGet(CACHE_KEYS.semesters);
+  if (cachedSemesters && cachedSemesters.length) {
+    semesters = cachedSemesters;
+    currentSemesterId = semesters[0].id;
+    const _cCourses = cacheGet(CACHE_KEYS.courses);
+    if (_cCourses && _cCourses[currentSemesterId]) courses = _cCourses[currentSemesterId];
+    const _cTodos = cacheGet(CACHE_KEYS.todos);
+    if (_cTodos && _cTodos[currentSemesterId]) todos = _cTodos[currentSemesterId];
+    const _cLinks = cacheGet(CACHE_KEYS.links);
+    if (_cLinks) links = _cLinks;
+    renderSemesterSelectors();
+    renderAll();
+    renderTodos();
+    renderLinks();
+  }
+  showPage('timetable');
+
+  // 2) 后台加载云端最新数据，成功后覆盖缓存与界面
   await loadSemesters();
   currentSemesterId = semesters[0] ? semesters[0].id : null;
   renderSemesterSelectors();
@@ -1286,7 +1328,6 @@ async function init() {
   renderTodos();
   await loadLinks();
   renderLinks();
-  showPage('timetable');
 
   if (!currentSemesterId) showToast(t('toast_create_semester_first'));
 }
