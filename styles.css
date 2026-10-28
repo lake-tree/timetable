@@ -208,6 +208,18 @@ html, body {
   border-left: 4px solid var(--card-color, #3A7BF9);
 }
 
+/* 今天已上过的课：颜色变浅（隔天自动恢复） */
+.course-card.passed {
+  opacity: 0.42;
+  filter: saturate(0.55);
+}
+.mobile-course-card.passed {
+  opacity: 0.5;
+}
+.mobile-course-card.passed .font-semibold {
+  color: #9ca3af;
+}
+
 /* ---------- 弹窗 ---------- */
 .modal {
   position: fixed;
