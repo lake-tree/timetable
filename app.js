@@ -221,6 +221,28 @@ function sectionTimeRange(start, end) {
   return e ? `${s}-${e}` : a.time;
 }
 
+// 解析某节课的结束时间（分钟数 0-1439）
+function sectionEndMinutes(section) {
+  const times = (window.APP_CONFIG && window.APP_CONFIG.SECTION_TIMES) || [];
+  const t = times[section - 1];
+  if (!t || !t.time) return null;
+  const parts = t.time.split('-');
+  const end = (parts[1] || parts[0]).trim();
+  const [h, m] = end.split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return null;
+  return h * 60 + m;
+}
+
+// 判断课程今天是否已经上完（当前时间已过其结束节次的结束时间）
+function isPassedToday(course) {
+  const today = todayInfo();
+  if (course.weekday !== today.weekday) return false;  // 非今天的课不淡化
+  const end = sectionEndMinutes(course.end_section);
+  if (end == null) return false;
+  const now = new Date();
+  return now.getHours() * 60 + now.getMinutes() >= end;
+}
+
 // 根据课程名生成稳定的卡片颜色
 function colorFor(course) {
   const colors = (window.APP_CONFIG && window.APP_CONFIG.CARD_COLORS) || ['#3A7BF9'];
@@ -631,7 +653,7 @@ function renderDesktopGrid() {
   // 课程卡片
   courses.forEach(c => {
     const card = document.createElement('div');
-    card.className = 'course-card';
+    card.className = 'course-card' + (isPassedToday(c) ? ' passed' : '');
     card.style.gridColumn = String(c.weekday + 1);
     card.style.gridRow = `${c.start_section} / ${c.end_section + 1}`;
     card.style.background = colorFor(c);
@@ -663,7 +685,7 @@ function renderMobileList() {
       itemsHtml = `<div class="text-xs text-gray-300 text-center py-3">${t('no_courses')}</div>`;
     } else {
       itemsHtml = dayCourses.map(c => `
-        <div class="mobile-course-card bg-white rounded-xl border border-gray-200 shadow-sm p-3 mb-2 cursor-pointer"
+        <div class="mobile-course-card bg-white rounded-xl border border-gray-200 shadow-sm p-3 mb-2 cursor-pointer ${isPassedToday(c) ? 'passed' : ''}"
              style="--card-color:${colorFor(c)}" data-id="${c.id}">
           <div class="flex items-start justify-between">
             <div class="font-semibold text-sm text-gray-800">${escapeHtml(c.name)}</div>
@@ -1330,6 +1352,13 @@ async function init() {
   renderLinks();
 
   if (!currentSemesterId) showToast(t('toast_create_semester_first'));
+
+  // 每 15 秒检查一次分钟变化，跨过下课时间自动刷新「已过」淡化（隔天打开自动恢复）
+  let lastMinute = new Date().getMinutes();
+  setInterval(() => {
+    const m = new Date().getMinutes();
+    if (m !== lastMinute) { lastMinute = m; renderAll(); }
+  }, 15000);
 }
 
 document.addEventListener('DOMContentLoaded', init);
