@@ -1,0 +1,24 @@
+# 定时保活：每 5 分钟访问一次 Supabase 数据库，
+# 避免免费版数据库在空闲（如隔夜/隔天）后被回收、进入冷启动，
+# 从而导致打开网站时数据长时间不显示。
+# anon key 为公开信息（本就在 config.js 中），直接写入无安全风险。
+name: Supabase Keep-alive
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'   # 每 5 分钟（UTC）
+  workflow_dispatch: {}      # 支持手动触发
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST to prevent idle sleep
+        run: |
+          code=$(curl -sS --max-time 25 -o /dev/null -w "%{http_code}" \
+            "https://dshmavfbjfoiagjtvfwq.supabase.co/rest/v1/semesters?select=id&limit=1" \
+            -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRzaG1hdmZiamZvaWFnanR2ZndxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE4NDAwMDAsImV4cCI6MjEwNzQxNjAwMH0.nRvAsPVhkbZdlTYKxR4OuEvhxlE2foO3s7kZo659Lmk" \
+            -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRzaG1hdmZiamZvaWFnanR2ZndxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE4NDAwMDAsImV4cCI6MjEwNzQxNjAwMH0.nRvAsPVhkbZdlTYKxR4OuEvhxlE2foO3s7kZo659Lmk")
+          echo "HTTP $code"
+          # 无论成败都不让本次运行标记为失败，下一轮再试
+          exit 0
