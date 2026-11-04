@@ -430,3 +430,111 @@ html, body {
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 8px; }
 ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+
+/* ============================================================
+   墨水屏（黑白高对比）模式
+   通过 <html class="eink"> 启用，配合 .eink-toggle 开关切换
+   ============================================================ */
+
+/* 切换按钮 */
+.eink-toggle {
+  min-width: 34px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.eink-toggle:hover { border-color: #3A7BF9; color: #3A7BF9; }
+.eink-toggle.on { background: #111827; border-color: #111827; color: #fff; }
+
+/* ---------- 全局：白底黑字 + 去动效（墨水屏刷新慢，动画=拖影） ---------- */
+.eink, .eink body { background: #fff !important; color: #111 !important; }
+.eink *, .eink *::before, .eink *::after {
+  transition: none !important;
+  animation: none !important;
+  box-shadow: none !important;
+}
+.eink .modal-mask { backdrop-filter: none !important; background: rgba(17, 17, 17, 0.45); }
+
+/* ---------- 文字对比度：浅灰统一加深 ---------- */
+.eink .text-gray-300, .eink .text-gray-400, .eink .text-gray-500 { color: #374151 !important; }
+.eink .text-gray-600, .eink .text-gray-700 { color: #1f2937 !important; }
+.eink .text-gray-800, .eink .text-gray-900 { color: #111 !important; }
+.eink .text-primary { color: #111 !important; }
+.eink .text-red-400, .eink .text-red-500 { color: #111 !important; font-weight: 700; }
+
+/* ---------- 背景：浅灰底统一转白 ---------- */
+.eink .bg-gray-50, .eink .bg-gray-100 { background: #fff !important; }
+.eink .bg-primary { background: #111 !important; color: #fff !important; }
+
+/* ---------- 描边：浅色边框加深，网格线清晰可见 ---------- */
+.eink .border-gray-100, .eink .border-gray-200 { border-color: #9ca3af !important; }
+.eink .grid-cell, .eink .time-cell, .eink .day-header-cell { border-color: #d1d5db !important; }
+
+/* ---------- 课程卡片：彩色底 → 白底黑字 + 深色描边 ---------- */
+.eink .course-card {
+  background: #fff !important;
+  color: #111 !important;
+  border: 1px solid #111 !important;
+}
+.eink .course-card .cc-meta { color: #374151 !important; }
+.eink .mobile-course-card { border-left: 4px solid #111 !important; }
+.eink #mobile-list span[style*="background"] { background: #111 !important; }
+
+/* 今天已上过的课：虚线边框 + 灰字（不依赖半透明 / 饱和度） */
+.eink .course-card.passed,
+.eink .mobile-course-card.passed {
+  opacity: 1 !important;
+  filter: none !important;
+  border-style: dashed !important;
+}
+.eink .course-card.passed .cc-name,
+.eink .mobile-course-card.passed .font-semibold { color: #6b7280 !important; }
+
+/* ---------- 今天高亮：反色 + 描边（不靠彩色） ---------- */
+.eink .day-header-cell.today { background: #111 !important; color: #fff !important; }
+.eink .day-header-cell.today .weekend,
+.eink .day-header-cell.today .sub { color: #fff !important; }
+.eink .today-tag { background: #fff !important; color: #111 !important; }
+.eink .today-column { background: #ececec !important; }
+.eink .today-group { border-color: #111 !important; background: #fff !important; }
+.eink .today-badge { background: #111 !important; color: #fff !important; }
+
+/* 周末红字 → 黑加粗 */
+.eink .day-header-cell .weekend { color: #111 !important; font-weight: 700; }
+
+/* ---------- 选中 / 置顶态：蓝底 → 白底 + 粗描边 ---------- */
+.eink .semester-item.current,
+.eink .todo-item.pinned,
+.eink .focus-mode-item.active { border-color: #111 !important; background: #fff !important; border-width: 2px !important; }
+.eink .link-card { border-color: #111 !important; background: #fff !important; border-top: 3px solid #111 !important; }
+.eink .link-initial { background: #111 !important; color: #fff !important; }
+
+/* ---------- 表单焦点：蓝边 → 黑边 ---------- */
+.eink .form-input:focus { border-color: #111 !important; box-shadow: none !important; }
+
+/* ---------- 状态点：红绿 → 黑白（实心 / 空心区分） ---------- */
+.eink #sync-dot.connected { background: #111 !important; }
+.eink #sync-dot.error { background: transparent !important; border: 1.5px solid #111 !important; }
+
+/* ---------- 顶部按钮：蓝 → 黑白描边 ---------- */
+.eink .lang-btn,
+.eink .lock-toggle { color: #111 !important; background: #fff !important; border-color: #111 !important; }
+.eink .lock-toggle.unlocked { background: #111 !important; color: #fff !important; }
+
+/* ---------- 弱化文字（图标 / 元信息）加深，保证可读 ---------- */
+.eink .day-header-cell .sub { color: #4b5563 !important; }
+.eink .time-cell { color: #4b5563 !important; }
+.eink .time-cell .t { color: #111 !important; }
+.eink .time-cell .tm { color: #4b5563 !important; }
+.eink .detail-row .k { color: #4b5563 !important; }
+.eink .todo-meta, .eink .focus-mode-meta, .eink .link-url { color: #4b5563 !important; }
+.eink .modal-close, .eink .todo-check, .eink .todo-edit, .eink .todo-pin, .eink .todo-del,
+.eink .link-actions button, .eink .focus-mode-actions button { color: #374151 !important; }
