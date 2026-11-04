@@ -21,6 +21,7 @@ let focusModes = [];         // 专注模式列表
 let editingFocusModeId = null; // 正在编辑的专注模式 id（null 表示新增）
 let focusState = null;       // 当前专注计时状态（null 表示未开始）
 let focusTimer = null;       // 专注倒计时 interval id
+let audioCtx = null;         // 提示音 AudioContext（在用户点击时预创建，规避自动播放限制）
 
 /* ---------- 本地缓存（秒出兜底，云端仍为数据权威） ---------- */
 const CACHE_KEYS = {
@@ -716,6 +717,7 @@ function startFocus(mode) {
   clearInterval(focusTimer);
   focusTimer = setInterval(tickFocus, 500);
   ensureNotifyPermission();
+  ensureAudio();
   renderFocusTimer();
   renderFocusModes();
   showToast('🍅 ' + mode.name);
@@ -820,18 +822,26 @@ function showFocusAlert(title, desc, emoji) {
   openModal('modal-focus-alert');
 }
 
-function playBeep() {
+function ensureAudio() {
   try {
     const Ctx = window.AudioContext || window.webkitAudioContext;
     if (!Ctx) return;
-    const ctx = new Ctx();
+    if (!audioCtx) audioCtx = new Ctx();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch (e) {}
+}
+
+function playBeep() {
+  ensureAudio();
+  if (!audioCtx) return;
+  try {
     [0, 0.6, 1.2].forEach(delay => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain); gain.connect(audioCtx.destination);
       osc.type = 'sine';
       osc.frequency.value = 880;
-      const t = ctx.currentTime + delay;
+      const t = audioCtx.currentTime + delay;
       gain.gain.setValueAtTime(0.001, t);
       gain.gain.exponentialRampToValueAtTime(0.3, t + 0.02);
       gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
