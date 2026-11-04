@@ -134,6 +134,37 @@
         <button id="btn-back-timetable" class="mb-3 text-xs text-gray-400 hidden lg:inline-block" data-i18n="back_timetable">← 返回课表</button>
         <div id="links-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3"></div>
       </section>
+
+      <!-- 专注视图 -->
+      <section id="focus-view" class="pb-24" style="display:none">
+        <div class="max-w-md mx-auto">
+          <!-- 计时器卡片 -->
+          <div class="rounded-2xl bg-white border border-gray-200 shadow-sm p-6 text-center">
+            <div id="focus-phase" class="text-sm font-semibold text-primary">🍅</div>
+            <div id="focus-time" class="text-6xl font-bold text-gray-800 tabular-nums my-3 tracking-tight">00:00</div>
+            <div id="focus-mode-name" class="text-sm text-gray-500 mb-1">选择下方模式开始专注</div>
+            <div id="focus-cycle" class="text-xs text-gray-400 mb-4"></div>
+
+            <div class="w-full h-2 bg-gray-100 rounded-full overflow-hidden mb-5">
+              <div id="focus-progress" class="h-full bg-primary rounded-full transition-all duration-1000" style="width:0%"></div>
+            </div>
+
+            <div class="flex gap-3 justify-center">
+              <button id="btn-focus-pause" class="hidden flex-1 rounded-lg border border-gray-200 bg-white py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">暂停</button>
+              <button id="btn-focus-stop" class="hidden rounded-lg border border-red-200 text-red-500 py-2.5 px-4 text-sm font-medium hover:bg-red-50 transition">停止</button>
+            </div>
+          </div>
+
+          <!-- 模式列表 -->
+          <div class="mt-5">
+            <div class="flex items-center justify-between mb-2">
+              <h2 class="text-sm font-semibold text-gray-700">🍅 专注模式</h2>
+              <button id="btn-add-focus-mode" class="text-xs text-primary font-medium hidden">＋ 添加</button>
+            </div>
+            <div id="focus-mode-list" class="space-y-2"></div>
+          </div>
+        </div>
+      </section>
     </main>
   </div>
 
@@ -144,6 +175,9 @@
     </button>
     <button id="nav-todos" class="nav-btn flex-1 py-3 text-xs flex flex-col items-center gap-1 text-gray-400">
       <span class="text-lg leading-none">📝</span><span data-i18n="nav_todos">待办</span>
+    </button>
+    <button id="nav-focus" class="nav-btn flex-1 py-3 text-xs flex flex-col items-center gap-1 text-gray-400">
+      <span class="text-lg leading-none">🍅</span><span data-i18n="nav_focus">专注</span>
     </button>
     <button id="nav-links" class="nav-btn flex-1 py-3 text-xs flex flex-col items-center gap-1 text-gray-400">
       <span class="text-lg leading-none">🔗</span><span data-i18n="nav_links">网站跳转</span>
@@ -350,6 +384,52 @@
           <button data-close="modal-link" class="flex-1 rounded-lg border border-gray-200 bg-white py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 transition" data-i18n="cancel">取消</button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- ======================= 专注模式编辑弹窗 ======================= -->
+  <div id="modal-focus-mode" class="modal hidden">
+    <div class="modal-mask" data-close="modal-focus-mode"></div>
+    <div class="modal-panel">
+      <div class="flex items-center justify-between">
+        <h3 id="focus-mode-title" class="text-lg font-bold text-gray-900">添加专注模式</h3>
+        <button class="modal-close" data-close="modal-focus-mode" aria-label="关闭">✕</button>
+      </div>
+      <div class="mt-4 space-y-3 text-sm">
+        <div>
+          <label class="form-label">名称 <span class="text-red-500">*</span></label>
+          <input id="fm-name" type="text" placeholder="如：学习 / 工作 / 阅读" class="form-input" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="form-label">专注时长（分钟）</label>
+            <input id="fm-focus" type="number" min="1" max="180" value="25" class="form-input" />
+          </div>
+          <div>
+            <label class="form-label">休息时长（分钟）</label>
+            <input id="fm-break" type="number" min="0" max="60" value="5" class="form-input" />
+          </div>
+        </div>
+        <div>
+          <label class="form-label">循环次数（留空 = 无限循环）</label>
+          <input id="fm-cycles" type="number" min="1" max="99" placeholder="留空 = ∞" class="form-input" />
+        </div>
+        <div class="flex gap-3 pt-1">
+          <button id="btn-save-focus-mode" class="flex-1 rounded-lg bg-primary text-white py-2.5 text-sm font-medium hover:bg-[#2f6be0] transition">保存</button>
+          <button data-close="modal-focus-mode" class="flex-1 rounded-lg border border-gray-200 bg-white py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">取消</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================= 专注阶段结束提示弹窗 ======================= -->
+  <div id="modal-focus-alert" class="modal hidden">
+    <div class="modal-mask" data-close="modal-focus-alert"></div>
+    <div class="modal-panel text-center">
+      <div id="focus-alert-emoji" class="text-5xl mb-3">🎉</div>
+      <h3 id="focus-alert-title" class="text-lg font-bold text-gray-900">专注完成！</h3>
+      <p id="focus-alert-desc" class="text-sm text-gray-500 mt-2"></p>
+      <button data-close="modal-focus-alert" class="mt-5 w-full rounded-lg bg-primary text-white py-2.5 text-sm font-medium hover:bg-[#2f6be0] transition">知道了</button>
     </div>
   </div>
 
