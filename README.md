@@ -9,6 +9,7 @@
 - Supabase Realtime `postgres_changes` 实时同步，无需刷新
 - 多学期管理，不同学期课表相互隔离
 - 待办：添加 / 勾选完成 / 置顶 / 删除；支持「循环」（每日自动刷新）与「单次」；可关联课程、设截止日期
+- 专注（番茄钟）：多个专注模式（名称 / 专注时长 / 休息时长 / 循环次数或无限），到点弹框 + 声音 + 桌面通知提醒
 - 账号系统（Supabase Auth）：邮箱 + 密码注册 / 登录，跨设备同步，登录后即可编辑
 - 访客只读：未登录只能查看主账号课表，登录后才能添加 / 修改 / 删除
 - 首个注册的账号自动成为「主账号」，历史课程 / 待办 / 网站自动归入该账号
@@ -31,13 +32,14 @@
 ├── icon-512.png        # 应用图标 512（兼 maskable）
 ├── icon-180.png        # iOS 主屏幕图标
 ├── supabase_auth_migration.sql  # 账号系统数据库迁移脚本（一次性执行）
+├── supabase_focus_migration.sql # 专注模式数据库迁移脚本（一次性执行）
 ├── README.md
 └── .nojekyll
 ```
 
 ## 数据库与权限模型
 
-表（均在 `public` schema）：`semesters`、`courses`、`todos`、`links`、`app_settings`（记录主账号 owner）。
+表（均在 `public` schema）：`semesters`、`courses`、`todos`、`links`、`focus_modes`、`app_settings`（记录主账号 owner）。
 
 权限模型（账号系统）：
 
@@ -46,7 +48,7 @@
 - 所有写操作通过 `SECURITY DEFINER` 函数执行，函数内校验 `auth.uid()`（登录身份），无需口令。
 - `claim_owner()`：首个登录用户认领历史无主数据并成为主账号（幂等）。
 - 函数统一 `set search_path = public, extensions`。
-- Realtime 使用 `supabase_realtime` publication（含 `courses` / `semesters` / `todos` / `links`）。
+- Realtime 使用 `supabase_realtime` publication（含 `courses` / `semesters` / `todos` / `links` / `focus_modes`）。
 
 > 完整的账号系统迁移 SQL（建表 + 加列 + RLS + 全部写函数），见 `supabase_auth_migration.sql`，在 Supabase Dashboard → SQL Editor 一次性执行。
 
