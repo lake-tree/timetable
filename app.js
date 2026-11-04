@@ -13,7 +13,8 @@ let editingLinkId = null;    // 正在编辑的网站 id
 let currentSemesterId = null;
 let editingCourseId = null;  // 正在编辑的课程 id（null 表示新增）
 let detailCourseId = null;   // 详情弹窗当前课程 id
-let editPwd = null;          // 已解锁的编辑口令（仅存内存/sessionStorage，用于 RPC 校验）
+let currentUser = null;      // 当前登录用户（Supabase Auth）；null 表示访客
+let authMode = 'signin';     // 登录弹窗当前模式：signin / signup
 let colW = null;             // 课表列宽（px；null 表示自适应铺满）
 let editingTodoId = null;    // 正在编辑的待办 id（null 表示新增）
 
@@ -24,12 +25,15 @@ const CACHE_KEYS = {
   todos: 'tt_cache_todos',       // 结构：{ [semesterId]: [todo, ...] }
   links: 'tt_cache_links',
 };
+// 缓存按「登录用户」隔离：不同账号 / 访客各用一份，避免串数据
+let cacheScope = 'anon';
+function scopedKey(key) { return key + '__' + cacheScope; }
 function cacheGet(key) {
-  try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : null; }
+  try { const raw = localStorage.getItem(scopedKey(key)); return raw ? JSON.parse(raw) : null; }
   catch (e) { return null; }
 }
 function cacheSet(key, val) {
-  try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {}
+  try { localStorage.setItem(scopedKey(key), JSON.stringify(val)); } catch (e) {}
 }
 
 const WEEKDAY_KEYS = ['w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'w7'];
@@ -85,6 +89,15 @@ const I18N = {
     confirm_delete_semester: '确定删除学期「{name}」吗？该学期下的所有课程也会被删除。',
     write_error_pwd: '口令错误，已锁定编辑', op_fail: '操作失败',
     drag_col: '拖动调整列宽', drag_sidebar: '拖动调整侧边栏宽度',
+    auth_login: '👤 登录', auth_logged_in: '👤 已登录', auth_signin: '登录', auth_signup: '注册',
+    auth_signin_desc: '登录后可编辑自己的课表；访客仅可查看主账号课表。',
+    auth_signup_desc: '注册后自动成为主账号，现有课表 / 待办 / 网站将归入你的账号。',
+    auth_email: '邮箱', auth_password: '密码', auth_no_account: '没有账号？', auth_has_account: '已有账号？',
+    auth_logout: '退出登录', auth_confirm_logout: '确定退出登录吗？',
+    ph_email: 'you@example.com', ph_password_min: '至少 6 位',
+    toast_logged_out: '已退出登录', toast_signup_ok: '注册成功，已自动登录',
+    toast_signup_email: '注册成功，请查收邮件验证后再登录', toast_auth_ok: '已登录',
+    auth_required: '请先登录', write_error_auth: '登录已失效，请重新登录',
   },
   en: {
     app_title: 'Timetable', app_subtitle: 'Timetable · Realtime sync', current_semester: 'Semester',
@@ -134,6 +147,15 @@ const I18N = {
     confirm_delete_semester: 'Delete semester "{name}"? All its courses will also be deleted.',
     write_error_pwd: 'Wrong password, editing locked', op_fail: 'Operation failed',
     drag_col: 'Drag to resize column width', drag_sidebar: 'Drag to resize sidebar',
+    auth_login: '👤 Sign in', auth_logged_in: '👤 Signed in', auth_signin: 'Sign in', auth_signup: 'Sign up',
+    auth_signin_desc: 'Sign in to edit your own timetable. Visitors can only view the owner\'s timetable.',
+    auth_signup_desc: 'After signing up you become the owner; existing courses / todos / links are assigned to you.',
+    auth_email: 'Email', auth_password: 'Password', auth_no_account: 'No account?', auth_has_account: 'Have an account?',
+    auth_logout: 'Sign out', auth_confirm_logout: 'Sign out?',
+    ph_email: 'you@example.com', ph_password_min: 'At least 6 characters',
+    toast_logged_out: 'Signed out', toast_signup_ok: 'Signed up and signed in',
+    toast_signup_email: 'Signed up, please verify your email then sign in', toast_auth_ok: 'Signed in',
+    auth_required: 'Please sign in first', write_error_auth: 'Session expired, please sign in again',
   },
 };
 
@@ -310,56 +332,147 @@ function setSyncStatus(state, text) {
 function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
 function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
 
-/* ---------- 口令解锁（访客只读 + 口令编辑） ---------- */
-function isUnlocked() { return !!editPwd; }
+/* ---------- 账号登录（Supabase Auth：邮箱 + 密码） ---------- */
+function isLoggedIn() { return !!currentUser; }
 
-function lock() {
-  editPwd = null;
-  sessionStorage.removeItem('edit_pwd');
+function shortEmail(email) {
+  if (!email) return '';
+  const at = email.indexOf('@');
+  const name = at > 0 ? email.slice(0, at) : email;
+  return name.length > 14 ? name.slice(0, 14) + '…' : name;
+}
+
+function setUser(user) {
+  currentUser = user || null;
+  cacheScope = user ? user.id : 'anon';
   renderAuthUI();
+}
+
+function openAuth(mode) {
+  if (mode === 'signin' || mode === 'signup') authMode = mode;
+  showAuthError('');
+  renderAuthForm();
+  openModal('modal-auth');
+  setTimeout(() => document.getElementById('auth-email').focus(), 50);
+}
+
+function renderAuthForm() {
+  const signup = authMode === 'signup';
+  document.getElementById('auth-title').textContent = signup ? t('auth_signup') : t('auth_signin');
+  document.getElementById('auth-sub').textContent = signup ? t('auth_signup_desc') : t('auth_signin_desc');
+  document.getElementById('btn-auth-submit').textContent = signup ? t('auth_signup') : t('auth_signin');
+  document.getElementById('auth-switch-text').textContent = signup ? t('auth_has_account') : t('auth_no_account');
+  document.getElementById('btn-auth-switch').textContent = signup ? t('auth_signin') : t('auth_signup');
+  document.getElementById('auth-password').setAttribute('autocomplete', signup ? 'new-password' : 'current-password');
+
+  const li = document.getElementById('auth-loggedin');
+  const form = document.getElementById('auth-form');
+  if (currentUser) {
+    li.classList.remove('hidden');
+    li.classList.add('flex');
+    document.getElementById('auth-current').textContent = t('auth_logged_in') + '：' + (currentUser.email || '');
+    form.classList.add('hidden');
+  } else {
+    li.classList.add('hidden');
+    li.classList.remove('flex');
+    form.classList.remove('hidden');
+  }
+}
+
+function showAuthError(msg) {
+  const box = document.getElementById('auth-error');
+  if (msg) { box.textContent = msg; box.classList.remove('hidden'); }
+  else box.classList.add('hidden');
+}
+
+function translateAuthError(err) {
+  const m = (err && err.message) || '';
+  if (/invalid.*credential|invalid login/i.test(m)) return t('toast_wrong_password');
+  if (/already registered|already been registered/i.test(m)) return t('toast_wrong_password');
+  if (/not confirmed/i.test(m)) return t('toast_signup_email');
+  if (/at least 6/i.test(m)) return t('ph_password_min');
+  return m || t('op_fail');
+}
+
+async function signIn() {
+  const email = document.getElementById('auth-email').value.trim();
+  const pwd = document.getElementById('auth-password').value;
+  if (!email || !pwd) { showAuthError(t('auth_required')); return; }
+  const { error } = await sb.auth.signInWithPassword({ email, password: pwd });
+  if (error) { showAuthError(translateAuthError(error)); return; }
+  showAuthError('');
+  closeModal('modal-auth');
+  showToast(t('toast_auth_ok'));
+  // 后续 setUser + 数据刷新由 onAuthStateChange(SIGNED_IN) 统一处理
+}
+
+async function signUp() {
+  const email = document.getElementById('auth-email').value.trim();
+  const pwd = document.getElementById('auth-password').value;
+  if (!email || !pwd) { showAuthError(t('auth_required')); return; }
+  if (pwd.length < 6) { showAuthError(t('ph_password_min')); return; }
+  const { data, error } = await sb.auth.signUp({ email, password: pwd });
+  if (error) { showAuthError(translateAuthError(error)); return; }
+  if (data.session) {
+    showAuthError('');
+    closeModal('modal-auth');
+    showToast(t('toast_signup_ok'));
+  } else {
+    showAuthError(t('toast_signup_email'));
+  }
+}
+
+async function signOut(silent) {
+  try { await sb.auth.signOut(); } catch (e) {}
+  const wasLoggedIn = !!currentUser;
+  setUser(null);
   renderTodos();
   renderLinks();
-  showToast(t('toast_locked'));
+  if (wasLoggedIn && !silent) showToast(t('toast_logged_out'));
 }
 
-function unlock(pwd) {
-  editPwd = pwd;
-  sessionStorage.setItem('edit_pwd', pwd);
-  renderAuthUI();
+// 登录 / 注册成功后：认领历史无主数据 + 重新拉取自己的数据
+async function onSignedIn() {
+  try { await sb.rpc('claim_owner'); } catch (e) { /* 表未建或已认领：静默 */ }
+  await loadSemesters();
+  currentSemesterId = semesters[0] ? semesters[0].id : null;
+  renderSemesterSelectors();
+  if (currentSemesterId) { await loadCourses(); await loadTodos(); }
+  await loadLinks();
+  renderAll();
   renderTodos();
   renderLinks();
 }
 
-function openUnlock() {
-  const input = document.getElementById('unlock-password');
-  input.value = '';
-  openModal('modal-unlock');
-  setTimeout(() => input.focus(), 50);
-}
-
-// 根据解锁状态切换增删改入口的显隐
+// 根据登录状态切换增删改入口的显隐
 function renderAuthUI() {
-  const unlocked = isUnlocked();
-  document.getElementById('btn-add').classList.toggle('hidden', !unlocked);
-  document.getElementById('detail-actions').classList.toggle('hidden', !unlocked);
-  document.getElementById('btn-add-todo').classList.toggle('hidden', !unlocked);
-  document.getElementById('btn-add-link').classList.toggle('hidden', !unlocked);
-  document.getElementById('mobile-add-todo').classList.toggle('hidden', !unlocked);
-  document.querySelectorAll('.sem-delete').forEach(b => b.classList.toggle('hidden', !unlocked));
-  // 全局锁状态按钮（桌面侧边栏顶部 + 移动端顶部栏）
-  const label = unlocked ? t('unlocked_short') : t('unlock_short');
-  ['btn-lock-toggle', 'btn-lock-toggle-mobile'].forEach(id => {
+  const loggedIn = isLoggedIn();
+  document.getElementById('btn-add').classList.toggle('hidden', !loggedIn);
+  document.getElementById('detail-actions').classList.toggle('hidden', !loggedIn);
+  document.getElementById('btn-add-todo').classList.toggle('hidden', !loggedIn);
+  document.getElementById('btn-add-link').classList.toggle('hidden', !loggedIn);
+  document.getElementById('mobile-add-todo').classList.toggle('hidden', !loggedIn);
+  document.querySelectorAll('.sem-delete').forEach(b => b.classList.toggle('hidden', !loggedIn));
+  // 全局账号状态按钮（桌面侧边栏顶部 + 移动端顶部栏）
+  const label = loggedIn ? '👤 ' + shortEmail(currentUser.email) : t('auth_login');
+  ['btn-auth-toggle', 'btn-auth-toggle-mobile'].forEach(id => {
     const btn = document.getElementById(id);
+    if (!btn) return;
     btn.textContent = label;
-    btn.classList.toggle('unlocked', unlocked);
+    btn.classList.toggle('unlocked', loggedIn);
   });
 }
 
-// 写操作报错统一处理：口令错误则强制锁定并提示
+// 写操作报错统一处理：登录失效则提示重新登录
 function handleWriteError(err, fallback) {
-  if (err && (err.code === '42501' || /口令/.test(err.message || ''))) {
-    lock();
-    showToast(t('write_error_pwd'));
+  if (err && (err.code === '42501' || /口令|Authentication|Forbidden|not authenticated/i.test(err.message || ''))) {
+    if (isLoggedIn()) {
+      showToast(t('write_error_auth'));
+      signOut(true);
+    } else {
+      showToast(t('auth_required'));
+      openAuth('signin');
+    }
   } else {
     showToast((fallback || t('op_fail')) + '：' + (err && err.message ? err.message : err));
   }
@@ -442,7 +555,7 @@ function linkInitial(name) {
 function renderLinks() {
   const grid = document.getElementById('links-grid');
   if (!grid) return;
-  const unlocked = isUnlocked();
+  const unlocked = isLoggedIn();
   const sorted = [...links].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
   if (sorted.length === 0) {
     grid.innerHTML = `<div class="col-span-full text-center text-xs text-gray-300 py-8">${t('no_links')}</div>`;
@@ -504,7 +617,7 @@ function renderTodos() {
     if (a.pinned && b.pinned) return new Date(b.pinned_at || 0) - new Date(a.pinned_at || 0);
     return new Date(b.created_at || 0) - new Date(a.created_at || 0);
   });
-  const unlocked = isUnlocked();
+  const unlocked = isLoggedIn();
 
   const itemHtml = (todo) => {
     const eff = effectiveDone(todo);
@@ -918,32 +1031,35 @@ function bindEvents() {
 
   // 添加课程（未解锁则先弹解锁框）
   document.getElementById('btn-add').addEventListener('click', () => {
-    if (!isUnlocked()) { openUnlock(); return; }
+    if (!isLoggedIn()) { openAuth('signin'); return; }
     openEdit(null);
   });
   document.getElementById('btn-mobile-add-course').addEventListener('click', () => {
-    if (!isUnlocked()) { openUnlock(); return; }
+    if (!isLoggedIn()) { openAuth('signin'); return; }
     openEdit(null);
   });
 
-  // 解锁 / 锁定（顶部全局状态按钮，两个入口同逻辑）
-  const handleLockToggle = () => { isUnlocked() ? lock() : openUnlock(); };
-  document.getElementById('btn-lock-toggle').addEventListener('click', handleLockToggle);
-  document.getElementById('btn-lock-toggle-mobile').addEventListener('click', handleLockToggle);
-  document.getElementById('btn-unlock-confirm').addEventListener('click', async () => {
-    const pwd = document.getElementById('unlock-password').value;
-    if (!pwd) { showToast(t('toast_enter_password')); return; }
-    const { data, error } = await sb.rpc('verify_edit_password', { p: pwd });
-    if (!error && data === true) {
-      unlock(pwd);
-      closeModal('modal-unlock');
-      showToast(t('toast_unlocked'));
-    } else {
-      showToast(t('toast_wrong_password'));
-    }
+  // 登录 / 账号（顶部全局状态按钮，两个入口同逻辑：点击打开账号弹窗）
+  document.getElementById('btn-auth-toggle').addEventListener('click', () => openAuth('signin'));
+  document.getElementById('btn-auth-toggle-mobile').addEventListener('click', () => openAuth('signin'));
+
+  // 登录 / 注册弹窗
+  document.getElementById('auth-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (authMode === 'signup') signUp(); else signIn();
   });
-  document.getElementById('unlock-password').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') document.getElementById('btn-unlock-confirm').click();
+  document.getElementById('btn-auth-switch').addEventListener('click', () => {
+    authMode = authMode === 'signup' ? 'signin' : 'signup';
+    showAuthError('');
+    renderAuthForm();
+  });
+  document.getElementById('btn-auth-logout').addEventListener('click', async () => {
+    if (!confirm(t('auth_confirm_logout'))) return;
+    closeModal('modal-auth');
+    await signOut(false);
+  });
+  document.getElementById('auth-password').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('auth-form').requestSubmit();
   });
 
   // 语言切换
@@ -967,15 +1083,15 @@ function bindEvents() {
 
   // 待办：添加
   document.getElementById('btn-add-todo').addEventListener('click', () => {
-    if (!isUnlocked()) { openUnlock(); return; }
+    if (!isLoggedIn()) { openAuth('signin'); return; }
     openTodoModal();
   });
   document.getElementById('mobile-add-todo').addEventListener('click', () => {
-    if (!isUnlocked()) { openUnlock(); return; }
+    if (!isLoggedIn()) { openAuth('signin'); return; }
     openTodoModal();
   });
   document.getElementById('btn-save-todo').addEventListener('click', async () => {
-    if (!isUnlocked()) { openUnlock(); return; }
+    if (!isLoggedIn()) { openAuth('signin'); return; }
     const content = document.getElementById('todo-f-content').value.trim();
     if (!content) { showToast(t('toast_enter_todo')); return; }
     const due = document.getElementById('todo-f-due').value || null;
@@ -985,12 +1101,12 @@ function bindEvents() {
     let error;
     if (isEdit) {
       ({ error } = await sb.rpc('edit_todo', {
-        p_pwd: editPwd, p_id: editingTodoId,
+        p_id: editingTodoId,
         p_content: content, p_due_date: due, p_course_id: cid, p_recurring: recurring,
       }));
     } else {
       ({ error } = await sb.rpc('add_todo', {
-        p_pwd: editPwd, p_semester_id: currentSemesterId,
+        p_semester_id: currentSemesterId,
         p_content: content, p_due_date: due, p_course_id: cid, p_recurring: recurring,
       }));
     }
@@ -1008,7 +1124,7 @@ function bindEvents() {
     if (!btn) {
       // 点击待办内容区域（非按钮）也可进入编辑（仅解锁后）
       const row = e.target.closest('.todo-item');
-      if (row && row.dataset.id && isUnlocked()) {
+      if (row && row.dataset.id && isLoggedIn()) {
         const td = todos.find(x => x.id === row.dataset.id);
         if (td) openTodoModal(td);
       }
@@ -1018,21 +1134,21 @@ function bindEvents() {
     const id = item && item.dataset.id;
     const todo = todos.find(x => x.id === id);
     if (!todo) return;
-    if (!isUnlocked()) { openUnlock(); return; }
+    if (!isLoggedIn()) { openAuth('signin'); return; }
     const act = btn.dataset.act;
     if (act === 'edit') { openTodoModal(todo); return; }
     if (act === 'delete') {
       if (!confirm(t('confirm_delete_todo'))) return;
-      const { error } = await sb.rpc('delete_todo', { p_pwd: editPwd, p_id: id });
+      const { error } = await sb.rpc('delete_todo', { p_id: id });
       if (error) { handleWriteError(error, t('toast_delete_fail')); return; }
       showToast(t('toast_deleted'));
     } else if (act === 'toggle-done') {
       // 循环任务：按“有效完成态”切换，勾选即记录今天完成时间
       const eff = effectiveDone(todo);
-      const { error } = await sb.rpc('set_todo_done', { p_pwd: editPwd, p_id: id, p_done: !eff });
+      const { error } = await sb.rpc('set_todo_done', { p_id: id, p_done: !eff });
       if (error) { handleWriteError(error, t('toast_update_fail')); return; }
     } else if (act === 'toggle-pin') {
-      const { error } = await sb.rpc('set_todo_pinned', { p_pwd: editPwd, p_id: id, p_pinned: !todo.pinned });
+      const { error } = await sb.rpc('set_todo_pinned', { p_id: id, p_pinned: !todo.pinned });
       if (error) { handleWriteError(error, t('toast_update_fail')); return; }
     }
     await loadTodos();
@@ -1043,11 +1159,11 @@ function bindEvents() {
 
   // 网站跳转：添加 / 保存 / 卡片点击
   document.getElementById('btn-add-link').addEventListener('click', () => {
-    if (!isUnlocked()) { openUnlock(); return; }
+    if (!isLoggedIn()) { openAuth('signin'); return; }
     openLinkModal(null);
   });
   document.getElementById('btn-save-link').addEventListener('click', async () => {
-    if (!isUnlocked()) { openUnlock(); return; }
+    if (!isLoggedIn()) { openAuth('signin'); return; }
     const name = document.getElementById('link-f-name').value.trim();
     const url = normalizeUrl(document.getElementById('link-f-url').value);
     if (!name) { showToast(t('toast_enter_link_name')); return; }
@@ -1055,9 +1171,9 @@ function bindEvents() {
     const isEdit = !!editingLinkId;
     let error;
     if (isEdit) {
-      ({ error } = await sb.rpc('update_link', { p_pwd: editPwd, p_id: editingLinkId, p_name: name, p_url: url }));
+      ({ error } = await sb.rpc('update_link', { p_id: editingLinkId, p_name: name, p_url: url }));
     } else {
-      ({ error } = await sb.rpc('add_link', { p_pwd: editPwd, p_name: name, p_url: url }));
+      ({ error } = await sb.rpc('add_link', { p_name: name, p_url: url }));
     }
     if (error) { handleWriteError(error, isEdit ? t('toast_save_fail') : t('toast_add_fail')); return; }
     closeModal('modal-link');
@@ -1075,10 +1191,10 @@ function bindEvents() {
       e.stopPropagation();
       const link = links.find(x => x.id === id);
       if (!link) return;
-      if (!isUnlocked()) { openUnlock(); return; }
+      if (!isLoggedIn()) { openAuth('signin'); return; }
       if (actBtn.dataset.act === 'delete') {
         if (!confirm(t('confirm_delete_link'))) return;
-        const { error } = await sb.rpc('delete_link', { p_pwd: editPwd, p_id: id });
+        const { error } = await sb.rpc('delete_link', { p_id: id });
         if (error) { handleWriteError(error, t('toast_delete_fail')); return; }
         await loadLinks();
         renderLinks();
@@ -1115,11 +1231,11 @@ function bindEvents() {
 
   // 新建学期（需解锁，走口令校验 RPC）
   document.getElementById('btn-create-semester').addEventListener('click', async () => {
-    if (!isUnlocked()) { openUnlock(); return; }
+    if (!isLoggedIn()) { openAuth('signin'); return; }
     const name = document.getElementById('new-semester-name').value.trim();
     if (!name) { showToast(t('toast_enter_semester_name')); return; }
     const start_date = document.getElementById('new-semester-date').value || null;
-    const { error } = await sb.rpc('add_semester', { p_pwd: editPwd, p_name: name, p_start_date: start_date });
+    const { error } = await sb.rpc('add_semester', { p_name: name, p_start_date: start_date });
     if (error) { handleWriteError(error, t('toast_create_fail')); return; }
     document.getElementById('new-semester-name').value = '';
     document.getElementById('new-semester-date').value = '';
@@ -1134,17 +1250,17 @@ function bindEvents() {
 
   // 详情弹窗：编辑 / 删除（需解锁，删除走口令校验 RPC）
   document.getElementById('btn-edit-course').addEventListener('click', () => {
-    if (!isUnlocked()) { openUnlock(); return; }
+    if (!isLoggedIn()) { openAuth('signin'); return; }
     const c = courses.find(x => x.id === detailCourseId);
     closeModal('modal-detail');
     if (c) openEdit(c);
   });
   document.getElementById('btn-delete-course').addEventListener('click', async () => {
-    if (!isUnlocked()) { openUnlock(); return; }
+    if (!isLoggedIn()) { openAuth('signin'); return; }
     const c = courses.find(x => x.id === detailCourseId);
     if (!c) return;
     if (!confirm(t('confirm_delete_course', { name: c.name }))) return;
-    const { error } = await sb.rpc('delete_course', { p_pwd: editPwd, p_id: c.id });
+    const { error } = await sb.rpc('delete_course', { p_id: c.id });
     if (error) { handleWriteError(error, t('toast_delete_fail')); return; }
     closeModal('modal-detail');
     await loadCourses();
@@ -1183,7 +1299,6 @@ function bindEvents() {
     try {
       let error;
       const params = {
-        p_pwd: editPwd,
         p_name: data.name,
         p_weekday: data.weekday,
         p_start: data.start_section,
@@ -1277,9 +1392,9 @@ function setNavActive(id) {
 async function deleteSemester(id) {
   const s = semesters.find(x => x.id === id);
   if (!s) return;
-  if (!isUnlocked()) { openUnlock(); return; }
+  if (!isLoggedIn()) { openAuth('signin'); return; }
   if (!confirm(t('confirm_delete_semester', { name: s.name }))) return;
-  const { error } = await sb.rpc('delete_semester', { p_pwd: editPwd, p_id: id });
+  const { error } = await sb.rpc('delete_semester', { p_id: id });
   if (error) { handleWriteError(error, '删除失败'); return; }
   await loadSemesters();
   if (currentSemesterId === id) currentSemesterId = semesters[0] ? semesters[0].id : null;
@@ -1305,8 +1420,7 @@ async function init() {
   renderSectionTimes();
   bindEvents();
 
-  // 恢复编辑口令（同一标签页会话内保持解锁）
-  editPwd = sessionStorage.getItem('edit_pwd') || null;
+  // 初始渲染（登录态此时尚未恢复，先按访客显示，稍后 getSession 后自动刷新）
   renderAuthUI();
   applyLanguage();
 
@@ -1321,6 +1435,28 @@ async function init() {
   }
 
   initSupabase();
+
+  // 恢复登录态（Supabase Auth session 本地持久化）
+  try {
+    const { data } = await sb.auth.getSession();
+    setUser(data && data.session ? data.session.user : null);
+  } catch (e) {
+    setUser(null);
+  }
+
+  // 监听登录状态变化（登录 / 登出 / 多标签页同步）
+  sb.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_OUT') {
+      const was = !!currentUser;
+      setUser(null);
+      if (was) { renderTodos(); renderLinks(); }
+    } else if (event === 'SIGNED_IN') {
+      const isNew = !currentUser || (session && session.user && currentUser.id !== session.user.id);
+      setUser(session && session.user ? session.user : null);
+      if (isNew && currentUser) onSignedIn();
+    }
+  });
+
   subscribeRealtime();
 
   // 1) 先用本地缓存立即渲染，秒出，避免冷启动/断网时长时间空白
