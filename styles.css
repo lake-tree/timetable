@@ -473,6 +473,7 @@ html, body {
 /* ---------- 背景：浅灰底统一转白 ---------- */
 .eink .bg-gray-50, .eink .bg-gray-100 { background: #fff !important; }
 .eink .bg-primary { background: #111 !important; color: #fff !important; }
+.eink .bg-primary:hover { background: #111 !important; }
 
 /* ---------- 描边：浅色边框加深，网格线清晰可见 ---------- */
 .eink .border-gray-100, .eink .border-gray-200 { border-color: #9ca3af !important; }
