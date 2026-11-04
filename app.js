@@ -114,6 +114,7 @@ const I18N = {
     focus_alert_finish: '全部完成！', focus_alert_finish_desc: '本次专注全部结束，休息一下吧',
     toast_focus_mode_added: '已添加专注模式', toast_focus_mode_updated: '已更新专注模式', toast_focus_mode_deleted: '已删除专注模式',
     toast_enter_focus_name: '请输入名称', confirm_delete_focus_mode: '删除这个专注模式？',
+    eink_label: '墨水屏模式', eink_short: '墨水', eink_toast_on: '已开启墨水屏模式', eink_toast_off: '已关闭墨水屏模式',
   },
   en: {
     app_title: 'Timetable', app_subtitle: 'Timetable · Realtime sync', current_semester: 'Semester',
@@ -182,6 +183,7 @@ const I18N = {
     focus_alert_finish: 'All done!', focus_alert_finish_desc: 'All focus rounds finished, take a rest',
     toast_focus_mode_added: 'Focus mode added', toast_focus_mode_updated: 'Focus mode updated', toast_focus_mode_deleted: 'Focus mode deleted',
     toast_enter_focus_name: 'Enter a name', confirm_delete_focus_mode: 'Delete this focus mode?',
+    eink_label: 'E-Ink mode', eink_short: 'E-Ink', eink_toast_on: 'E-Ink mode on', eink_toast_off: 'E-Ink mode off',
   },
 };
 
@@ -231,6 +233,41 @@ function toggleLang() {
   currentLang = currentLang === 'zh' ? 'en' : 'zh';
   localStorage.setItem('timetable_lang', currentLang);
   applyLanguage();
+}
+
+/* ---------- 墨水屏（黑白高对比）模式 ---------- */
+const EINK_STORAGE_KEY = 'timetable_eink';   // 取值：'on' / 'off'（未设置 = 自动检测）
+
+// 自动检测墨水屏环境：识别墨水屏设备 UA，或系统「高对比度」偏好
+function detectEink() {
+  try {
+    const ua = navigator.userAgent || '';
+    if (/boox|onyx|hisense|ireader|kindle|kobo|pocketbook|tolino|nook|meebook|yotaphone|inkpad|e-?ink/i.test(ua)) {
+      return true;
+    }
+    if (window.matchMedia && window.matchMedia('(prefers-contrast: more)').matches) return true;
+  } catch (e) {}
+  return false;
+}
+
+function applyEink(on) {
+  document.documentElement.classList.toggle('eink', on);
+  document.querySelectorAll('.eink-toggle').forEach(b => b.classList.toggle('on', on));
+}
+
+function toggleEink() {
+  const next = !document.documentElement.classList.contains('eink');
+  localStorage.setItem(EINK_STORAGE_KEY, next ? 'on' : 'off');
+  applyEink(next);
+  showToast(t(next ? 'eink_toast_on' : 'eink_toast_off'));
+}
+
+// 初始化墨水屏模式：手动设置优先，否则自动检测
+function initEink() {
+  const saved = localStorage.getItem(EINK_STORAGE_KEY);
+  if (saved === 'on') { applyEink(true); return; }
+  if (saved === 'off') { applyEink(false); return; }
+  applyEink(detectEink());
 }
 
 /* ---------- 工具函数 ---------- */
@@ -1394,6 +1431,10 @@ function bindEvents() {
   document.getElementById('lang-toggle').addEventListener('click', toggleLang);
   document.getElementById('lang-toggle-mobile').addEventListener('click', toggleLang);
 
+  // 墨水屏模式切换
+  document.getElementById('eink-toggle').addEventListener('click', toggleEink);
+  document.getElementById('eink-toggle-mobile').addEventListener('click', toggleEink);
+
   // 学期管理
   document.getElementById('btn-manage-semesters').addEventListener('click', () => {
     renderSemesterList();
@@ -1775,6 +1816,7 @@ async function init() {
   renderDayHeader();
   renderSectionTimes();
   bindEvents();
+  initEink();
 
   // 初始渲染（登录态此时尚未恢复，先按访客显示，稍后 getSession 后自动刷新）
   renderAuthUI();
