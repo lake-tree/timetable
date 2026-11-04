@@ -17,6 +17,10 @@ let currentUser = null;      // 当前登录用户（Supabase Auth）；null 表
 let authMode = 'signin';     // 登录弹窗当前模式：signin / signup
 let colW = null;             // 课表列宽（px；null 表示自适应铺满）
 let editingTodoId = null;    // 正在编辑的待办 id（null 表示新增）
+let focusModes = [];         // 专注模式列表
+let editingFocusModeId = null; // 正在编辑的专注模式 id（null 表示新增）
+let focusState = null;       // 当前专注计时状态（null 表示未开始）
+let focusTimer = null;       // 专注倒计时 interval id
 
 /* ---------- 本地缓存（秒出兜底，云端仍为数据权威） ---------- */
 const CACHE_KEYS = {
@@ -24,6 +28,7 @@ const CACHE_KEYS = {
   courses: 'tt_cache_courses',   // 结构：{ [semesterId]: [course, ...] }
   todos: 'tt_cache_todos',       // 结构：{ [semesterId]: [todo, ...] }
   links: 'tt_cache_links',
+  focus: 'tt_cache_focus_modes',
 };
 // 缓存按「登录用户」隔离：不同账号 / 访客各用一份，避免串数据
 let cacheScope = 'anon';
@@ -98,6 +103,16 @@ const I18N = {
     toast_logged_out: '已退出登录', toast_signup_ok: '注册成功，已自动登录',
     toast_signup_email: '注册成功，请查收邮件验证后再登录', toast_auth_ok: '已登录',
     auth_required: '请先登录', write_error_auth: '登录已失效，请重新登录',
+    nav_focus: '专注', focus_modes: '专注模式', focus_add: '＋ 添加',
+    focus_start: '开始专注', focus_pause: '暂停', focus_resume: '继续', focus_stop: '停止',
+    focus_phase_focus: '专注中', focus_phase_break: '休息中', focus_idle_hint: '选择下方模式开始专注',
+    focus_cycle: '第 {n} 轮', focus_cycles_inf: '无限循环', focus_cycles_n: '共 {n} 轮',
+    focus_mode_add_title: '添加专注模式', focus_mode_edit_title: '编辑专注模式',
+    focus_alert_done: '专注完成！', focus_alert_break: '休息一下', focus_alert_break_desc: '休息 {n} 分钟吧',
+    focus_alert_resume: '休息结束！', focus_alert_resume_desc: '继续第 {n} 轮专注',
+    focus_alert_finish: '全部完成！', focus_alert_finish_desc: '本次专注全部结束，休息一下吧',
+    toast_focus_mode_added: '已添加专注模式', toast_focus_mode_updated: '已更新专注模式', toast_focus_mode_deleted: '已删除专注模式',
+    toast_enter_focus_name: '请输入名称', confirm_delete_focus_mode: '删除这个专注模式？',
   },
   en: {
     app_title: 'Timetable', app_subtitle: 'Timetable · Realtime sync', current_semester: 'Semester',
@@ -156,6 +171,16 @@ const I18N = {
     toast_logged_out: 'Signed out', toast_signup_ok: 'Signed up and signed in',
     toast_signup_email: 'Signed up, please verify your email then sign in', toast_auth_ok: 'Signed in',
     auth_required: 'Please sign in first', write_error_auth: 'Session expired, please sign in again',
+    nav_focus: 'Focus', focus_modes: 'Focus modes', focus_add: '＋ Add',
+    focus_start: 'Start', focus_pause: 'Pause', focus_resume: 'Resume', focus_stop: 'Stop',
+    focus_phase_focus: 'Focusing', focus_phase_break: 'Break', focus_idle_hint: 'Pick a mode below to start',
+    focus_cycle: 'Round {n}', focus_cycles_inf: 'Endless loop', focus_cycles_n: '{n} rounds total',
+    focus_mode_add_title: 'Add focus mode', focus_mode_edit_title: 'Edit focus mode',
+    focus_alert_done: 'Focus done!', focus_alert_break: 'Take a break', focus_alert_break_desc: 'Break for {n} min',
+    focus_alert_resume: 'Break over!', focus_alert_resume_desc: 'Start round {n}',
+    focus_alert_finish: 'All done!', focus_alert_finish_desc: 'All focus rounds finished, take a rest',
+    toast_focus_mode_added: 'Focus mode added', toast_focus_mode_updated: 'Focus mode updated', toast_focus_mode_deleted: 'Focus mode deleted',
+    toast_enter_focus_name: 'Enter a name', confirm_delete_focus_mode: 'Delete this focus mode?',
   },
 };
 
@@ -197,6 +222,7 @@ function applyLanguage() {
   renderTodos();
   renderSemesterList();
   renderLinks();
+  renderFocusModes();
   renderAuthUI();
 }
 
@@ -439,9 +465,11 @@ async function onSignedIn() {
   renderSemesterSelectors();
   if (currentSemesterId) { await loadCourses(); await loadTodos(); }
   await loadLinks();
+  await loadFocusModes();
   renderAll();
   renderTodos();
   renderLinks();
+  renderFocusModes();
 }
 
 // 根据登录状态切换增删改入口的显隐
@@ -451,6 +479,7 @@ function renderAuthUI() {
   document.getElementById('detail-actions').classList.toggle('hidden', !loggedIn);
   document.getElementById('btn-add-todo').classList.toggle('hidden', !loggedIn);
   document.getElementById('btn-add-link').classList.toggle('hidden', !loggedIn);
+  document.getElementById('btn-add-focus-mode').classList.toggle('hidden', !loggedIn);
   document.getElementById('mobile-add-todo').classList.toggle('hidden', !loggedIn);
   document.querySelectorAll('.sem-delete').forEach(b => b.classList.toggle('hidden', !loggedIn));
   // 全局账号状态按钮（桌面侧边栏顶部 + 移动端顶部栏）
@@ -541,6 +570,289 @@ async function loadLinks() {
   }
 }
 
+/* ---------- 专注（番茄钟） ---------- */
+async function loadFocusModes() {
+  try {
+    const { data, error } = await sb.from('focus_modes').select('*').order('created_at', { ascending: true });
+    if (error) throw error;
+    focusModes = data || [];
+    cacheSet(CACHE_KEYS.focus, focusModes);
+  } catch (e) {
+    console.warn('loadFocusModes:', e && e.message ? e.message : e);
+    focusModes = [];
+  }
+}
+
+function renderFocusModes() {
+  const box = document.getElementById('focus-mode-list');
+  if (!box) return;
+  const loggedIn = isLoggedIn();
+  if (focusModes.length === 0) {
+    box.innerHTML = `<div class="text-xs text-gray-300 text-center py-6">${loggedIn ? '点右上角「＋ 添加」创建第一个专注模式' : '暂无专注模式'}</div>`;
+    return;
+  }
+  box.innerHTML = focusModes.map(m => {
+    const cyc = m.cycles ? t('focus_cycles_n', { n: m.cycles }) : t('focus_cycles_inf');
+    const active = focusState && focusState.modeId === m.id;
+    const actions = loggedIn
+      ? `<div class="focus-mode-actions"><button data-act="edit">✏️</button><button data-act="delete">🗑</button></div>`
+      : '';
+    return `
+      <div class="focus-mode-item ${active ? 'active' : ''}" data-id="${m.id}">
+        <div class="focus-mode-main">
+          <div class="focus-mode-name">${escapeHtml(m.name)}</div>
+          <div class="focus-mode-meta">🍅 ${m.focus_minutes} 分钟 · ☕ ${m.break_minutes} 分钟 · 🔁 ${escapeHtml(cyc)}</div>
+        </div>
+        ${actions}
+      </div>`;
+  }).join('');
+}
+
+function openFocusModeModal(mode) {
+  editingFocusModeId = mode ? mode.id : null;
+  document.getElementById('focus-mode-title').textContent = mode ? t('focus_mode_edit_title') : t('focus_mode_add_title');
+  document.getElementById('fm-name').value = mode ? mode.name : '';
+  document.getElementById('fm-focus').value = mode ? mode.focus_minutes : 25;
+  document.getElementById('fm-break').value = mode ? mode.break_minutes : 5;
+  document.getElementById('fm-cycles').value = mode && mode.cycles != null ? mode.cycles : '';
+  openModal('modal-focus-mode');
+  setTimeout(() => document.getElementById('fm-name').focus(), 50);
+}
+
+async function saveFocusMode() {
+  if (!isLoggedIn()) { openAuth('signin'); return; }
+  const name = document.getElementById('fm-name').value.trim();
+  if (!name) { showToast(t('toast_enter_focus_name')); return; }
+  const focus = parseInt(document.getElementById('fm-focus').value, 10) || 25;
+  const brk = parseInt(document.getElementById('fm-break').value, 10) || 0;
+  const cycRaw = document.getElementById('fm-cycles').value.trim();
+  const cycles = cycRaw === '' ? null : (parseInt(cycRaw, 10) || null);
+  const isEdit = !!editingFocusModeId;
+  let error;
+  if (isEdit) {
+    ({ error } = await sb.rpc('update_focus_mode', { p_id: editingFocusModeId, p_name: name, p_focus_minutes: focus, p_break_minutes: brk, p_cycles: cycles }));
+  } else {
+    ({ error } = await sb.rpc('add_focus_mode', { p_name: name, p_focus_minutes: focus, p_break_minutes: brk, p_cycles: cycles }));
+  }
+  if (error) { handleWriteError(error, t('toast_save_fail')); return; }
+  closeModal('modal-focus-mode');
+  editingFocusModeId = null;
+  await loadFocusModes();
+  renderFocusModes();
+  showToast(isEdit ? t('toast_focus_mode_updated') : t('toast_focus_mode_added'));
+}
+
+async function deleteFocusMode(id) {
+  if (!isLoggedIn()) { openAuth('signin'); return; }
+  if (!confirm(t('confirm_delete_focus_mode'))) return;
+  const { error } = await sb.rpc('delete_focus_mode', { p_id: id });
+  if (error) { handleWriteError(error, t('toast_delete_fail')); return; }
+  if (focusState && focusState.modeId === id) stopFocus(true);
+  await loadFocusModes();
+  renderFocusModes();
+  showToast(t('toast_focus_mode_deleted'));
+}
+
+/* 专注计时器 */
+function fmtFocusTime(ms) {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+}
+
+function renderFocusTimer() {
+  const timeEl = document.getElementById('focus-time');
+  const phaseEl = document.getElementById('focus-phase');
+  const nameEl = document.getElementById('focus-mode-name');
+  const cycEl = document.getElementById('focus-cycle');
+  const progEl = document.getElementById('focus-progress');
+  const pause = document.getElementById('btn-focus-pause');
+  const stop = document.getElementById('btn-focus-stop');
+  if (!timeEl) return;
+
+  if (!focusState) {
+    phaseEl.textContent = '🍅';
+    timeEl.textContent = '00:00';
+    nameEl.textContent = t('focus_idle_hint');
+    cycEl.textContent = '';
+    progEl.style.width = '0%';
+    pause.classList.add('hidden');
+    stop.classList.add('hidden');
+    return;
+  }
+
+  const isBreak = focusState.phase === 'break';
+  phaseEl.textContent = isBreak ? t('focus_phase_break') : t('focus_phase_focus');
+  const mode = focusModes.find(m => m.id === focusState.modeId);
+  nameEl.textContent = mode ? mode.name : '';
+  cycEl.textContent = focusState.totalCycles
+    ? (t('focus_cycle', { n: focusState.cycle }) + ' / ' + t('focus_cycles_n', { n: focusState.totalCycles }))
+    : (t('focus_cycle', { n: focusState.cycle }) + ' · ' + t('focus_cycles_inf'));
+
+  const remaining = focusState.paused ? focusState.remainingMs : (focusState.endTime - Date.now());
+  timeEl.textContent = fmtFocusTime(remaining);
+  const pct = focusState.phaseMs > 0 ? Math.max(0, Math.min(100, 100 * remaining / focusState.phaseMs)) : 0;
+  progEl.style.width = pct + '%';
+
+  pause.classList.remove('hidden');
+  stop.classList.remove('hidden');
+  pause.textContent = focusState.paused ? t('focus_resume') : t('focus_pause');
+}
+
+function startFocus(mode) {
+  const focusMs = (mode.focus_minutes || 25) * 60 * 1000;
+  if (focusState) stopFocus(true);
+  focusState = {
+    modeId: mode.id,
+    phase: 'focus',
+    cycle: 1,
+    totalCycles: mode.cycles || null,
+    phaseMs: focusMs,
+    endTime: Date.now() + focusMs,
+    paused: false,
+    remainingMs: focusMs,
+  };
+  clearInterval(focusTimer);
+  focusTimer = setInterval(tickFocus, 500);
+  ensureNotifyPermission();
+  renderFocusTimer();
+  renderFocusModes();
+  showToast('🍅 ' + mode.name);
+}
+
+function tickFocus() {
+  if (!focusState || focusState.paused) return;
+  if (Date.now() >= focusState.endTime) onPhaseEnd();
+  else renderFocusTimer();
+}
+
+// 返回 true 表示还有下一轮（cycle 已递增），false 表示全部结束
+function nextRound(st) {
+  if (!st.totalCycles) { st.cycle++; return true; } // 无限循环
+  if (st.cycle >= st.totalCycles) return false;     // 已是最后一轮
+  st.cycle++;
+  return true;
+}
+
+function onPhaseEnd() {
+  const st = focusState;
+  const mode = focusModes.find(m => m.id === st.modeId);
+  const focusMin = mode ? (mode.focus_minutes || 25) : 25;
+  const breakMin = mode ? (mode.break_minutes || 0) : 0;
+
+  if (st.phase === 'focus') {
+    playBeep();
+    if (breakMin > 0) {
+      const breakMs = breakMin * 60 * 1000;
+      st.phase = 'break';
+      st.phaseMs = breakMs;
+      st.endTime = Date.now() + breakMs;
+      st.remainingMs = breakMs;
+      showFocusAlert(t('focus_alert_done'), t('focus_alert_break_desc', { n: breakMin }), '🎉');
+      notifyPhase(t('focus_alert_done'), t('focus_alert_break_desc', { n: breakMin }));
+    } else if (nextRound(st)) {
+      st.phase = 'focus';
+      st.phaseMs = focusMin * 60 * 1000;
+      st.endTime = Date.now() + st.phaseMs;
+      st.remainingMs = st.phaseMs;
+      showFocusAlert(t('focus_alert_done'), t('focus_alert_resume_desc', { n: st.cycle }), '🎉');
+      notifyPhase(t('focus_alert_done'), t('focus_alert_resume_desc', { n: st.cycle }));
+    } else {
+      finishFocus();
+      showFocusAlert(t('focus_alert_finish'), t('focus_alert_finish_desc'), '🏁');
+      notifyPhase(t('focus_alert_finish'), t('focus_alert_finish_desc'));
+      return;
+    }
+  } else {
+    playBeep();
+    if (nextRound(st)) {
+      st.phase = 'focus';
+      st.phaseMs = focusMin * 60 * 1000;
+      st.endTime = Date.now() + st.phaseMs;
+      st.remainingMs = st.phaseMs;
+      showFocusAlert(t('focus_alert_resume'), t('focus_alert_resume_desc', { n: st.cycle }), '💪');
+      notifyPhase(t('focus_alert_resume'), t('focus_alert_resume_desc', { n: st.cycle }));
+    } else {
+      finishFocus();
+      showFocusAlert(t('focus_alert_finish'), t('focus_alert_finish_desc'), '🏁');
+      notifyPhase(t('focus_alert_finish'), t('focus_alert_finish_desc'));
+      return;
+    }
+  }
+  renderFocusTimer();
+  renderFocusModes();
+}
+
+function finishFocus() {
+  clearInterval(focusTimer);
+  focusTimer = null;
+  focusState = null;
+  renderFocusTimer();
+  renderFocusModes();
+}
+
+function stopFocus(silent) {
+  clearInterval(focusTimer);
+  focusTimer = null;
+  focusState = null;
+  renderFocusTimer();
+  renderFocusModes();
+  if (!silent) showToast(t('focus_stopped'));
+}
+
+function togglePauseFocus() {
+  if (!focusState) return;
+  if (focusState.paused) {
+    focusState.paused = false;
+    focusState.endTime = Date.now() + focusState.remainingMs;
+  } else {
+    focusState.remainingMs = focusState.endTime - Date.now();
+    focusState.paused = true;
+  }
+  renderFocusTimer();
+}
+
+function showFocusAlert(title, desc, emoji) {
+  document.getElementById('focus-alert-emoji').textContent = emoji || '🎉';
+  document.getElementById('focus-alert-title').textContent = title;
+  document.getElementById('focus-alert-desc').textContent = desc || '';
+  openModal('modal-focus-alert');
+}
+
+function playBeep() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    [0, 0.6, 1.2].forEach(delay => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.value = 880;
+      const t = ctx.currentTime + delay;
+      gain.gain.setValueAtTime(0.001, t);
+      gain.gain.exponentialRampToValueAtTime(0.3, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+      osc.start(t);
+      osc.stop(t + 0.5);
+    });
+  } catch (e) {}
+}
+
+function ensureNotifyPermission() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    try { Notification.requestPermission().catch(() => {}); } catch (e) {}
+  }
+}
+
+function notifyPhase(title, body) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  if (document.visibilityState === 'visible') return; // 前台用弹框即可
+  try { new Notification('🍅 ' + title, { body: body || '' }); } catch (e) {}
+}
+
 function normalizeUrl(u) {
   let s = (u || '').trim();
   if (!s) return '';
@@ -591,12 +903,15 @@ function showPage(page) {
   const mv = document.getElementById('mobile-view');
   const tv = document.getElementById('mobile-todos-view');
   const lv = document.getElementById('links-view');
+  const fv = document.getElementById('focus-view');
   if (dv) dv.style.display = (page === 'timetable') ? '' : 'none';
   if (mv) mv.style.display = (page === 'timetable') ? '' : 'none';
   if (tv) tv.style.display = (page === 'todos') ? 'block' : 'none';
   if (lv) lv.style.display = (page === 'links') ? 'block' : 'none';
+  if (fv) fv.style.display = (page === 'focus') ? 'block' : 'none';
   if (page === 'todos') renderTodos();
   if (page === 'links') renderLinks();
+  if (page === 'focus') { renderFocusModes(); renderFocusTimer(); }
 }
 
 // 待办是否“当前有效完成”：循环任务仅在完成当天算完成，跨天自动刷新为未完成
@@ -989,6 +1304,9 @@ function subscribeRealtime() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'links' }, () => {
       loadLinks().then(renderLinks);
     })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'focus_modes' }, () => {
+      loadFocusModes().then(() => { renderFocusModes(); });
+    })
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') setSyncStatus('connected');
       else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') setSyncStatus('error');
@@ -1079,6 +1397,7 @@ function bindEvents() {
   document.getElementById('btn-back-timetable').addEventListener('click', () => showPage('timetable'));
   document.getElementById('nav-timetable').addEventListener('click', () => { setNavActive('nav-timetable'); showPage('timetable'); });
   document.getElementById('nav-todos').addEventListener('click', () => { setNavActive('nav-todos'); showPage('todos'); });
+  document.getElementById('nav-focus').addEventListener('click', () => { setNavActive('nav-focus'); showPage('focus'); });
   document.getElementById('nav-links').addEventListener('click', () => { setNavActive('nav-links'); showPage('links'); });
 
   // 待办：添加
@@ -1327,6 +1646,33 @@ function bindEvents() {
   bindGridResize();
 
   document.getElementById('btn-cancel-edit').addEventListener('click', () => closeModal('modal-edit'));
+
+  // 专注：模式管理 + 计时控制
+  document.getElementById('btn-add-focus-mode').addEventListener('click', () => {
+    if (!isLoggedIn()) { openAuth('signin'); return; }
+    openFocusModeModal(null);
+  });
+  document.getElementById('btn-save-focus-mode').addEventListener('click', saveFocusMode);
+  document.getElementById('btn-focus-pause').addEventListener('click', togglePauseFocus);
+  document.getElementById('btn-focus-stop').addEventListener('click', () => stopFocus(false));
+  document.getElementById('focus-mode-list').addEventListener('click', async (e) => {
+    const item = e.target.closest('.focus-mode-item');
+    if (!item) return;
+    const id = item.dataset.id;
+    const actBtn = e.target.closest('[data-act]');
+    if (actBtn) {
+      e.stopPropagation();
+      const mode = focusModes.find(x => x.id === id);
+      if (!mode) return;
+      if (!isLoggedIn()) { openAuth('signin'); return; }
+      if (actBtn.dataset.act === 'edit') openFocusModeModal(mode);
+      else if (actBtn.dataset.act === 'delete') await deleteFocusMode(id);
+      return;
+    }
+    // 点击卡片 → 开始该模式
+    const mode = focusModes.find(x => x.id === id);
+    if (mode) startFocus(mode);
+  });
 }
 
 // 侧边栏宽度拖拽
@@ -1449,7 +1795,7 @@ async function init() {
     if (event === 'SIGNED_OUT') {
       const was = !!currentUser;
       setUser(null);
-      if (was) { renderTodos(); renderLinks(); }
+      if (was) { renderTodos(); renderLinks(); renderFocusModes(); }
     } else if (event === 'SIGNED_IN') {
       const isNew = !currentUser || (session && session.user && currentUser.id !== session.user.id);
       setUser(session && session.user ? session.user : null);
@@ -1470,10 +1816,13 @@ async function init() {
     if (_cTodos && _cTodos[currentSemesterId]) todos = _cTodos[currentSemesterId];
     const _cLinks = cacheGet(CACHE_KEYS.links);
     if (_cLinks) links = _cLinks;
+    const _cFocus = cacheGet(CACHE_KEYS.focus);
+    if (_cFocus) focusModes = _cFocus;
     renderSemesterSelectors();
     renderAll();
     renderTodos();
     renderLinks();
+    renderFocusModes();
   }
   showPage('timetable');
 
@@ -1486,6 +1835,8 @@ async function init() {
   renderTodos();
   await loadLinks();
   renderLinks();
+  await loadFocusModes();
+  renderFocusModes();
 
   if (!currentSemesterId) showToast(t('toast_create_semester_first'));
 
