@@ -22,6 +22,7 @@ let editingFocusModeId = null; // 正在编辑的专注模式 id（null 表示�
 let focusState = null;       // 当前专注计时状态（null 表示未开始）
 let focusTimer = null;       // 专注倒计时 interval id
 let audioCtx = null;         // 提示音 AudioContext（在用户点击时预创建，规避自动播放限制）
+let focusSyncQueue = Promise.resolve(); // 串行化专注 RPC，避免旧 clear 删除新会话
 
 /* ---------- 本地缓存（秒出兜底，云端仍为数据权威） ---------- */
 const CACHE_KEYS = {
@@ -758,6 +759,7 @@ function startFocus(mode) {
   renderFocusTimer();
   renderFocusModes();
   showToast('🍅 ' + mode.name);
+  pushFocusSession();
 }
 
 function tickFocus() {
@@ -821,6 +823,7 @@ function onPhaseEnd() {
   }
   renderFocusTimer();
   renderFocusModes();
+  pushFocusSession();
 }
 
 function finishFocus() {
@@ -829,6 +832,7 @@ function finishFocus() {
   focusState = null;
   renderFocusTimer();
   renderFocusModes();
+  clearFocusSession();
 }
 
 function stopFocus(silent) {
@@ -837,6 +841,7 @@ function stopFocus(silent) {
   focusState = null;
   renderFocusTimer();
   renderFocusModes();
+  clearFocusSession();
   if (!silent) showToast(t('focus_stopped'));
 }
 
@@ -850,6 +855,7 @@ function togglePauseFocus() {
     focusState.paused = true;
   }
   renderFocusTimer();
+  pushFocusSession();
 }
 
 function showFocusAlert(title, desc, emoji) {
@@ -857,6 +863,65 @@ function showFocusAlert(title, desc, emoji) {
   document.getElementById('focus-alert-title').textContent = title;
   document.getElementById('focus-alert-desc').textContent = desc || '';
   openModal('modal-focus-alert');
+}
+
+/* ---------- 专注状态上云 ---------- */
+// 把"正在进行的倒计时状态"推送到 focus_sessions 表，
+// 让 OnePage 设备端（匿名只读）能读到当前专注状态。
+// 触发点：开始 / 暂停恢复 / 阶段切换（见 startFocus/togglePauseFocus/onPhaseEnd）
+// RPC 按事件顺序串行执行：supabase-js 的普通 API 错误通常通过返回值的
+// { error } 字段表达，不一定抛异常；这里显式检查并转成异常统一记录。
+function queueFocusSync(operation) {
+  const run = focusSyncQueue.then(operation);
+  focusSyncQueue = run.catch(() => {});
+  return run;
+}
+
+async function pushFocusSession() {
+  if (!sb || !isLoggedIn() || !focusState) return Promise.resolve();
+  // 立即快照当前状态，避免队列排队期间状态变化导致推送过期数据
+  const session = { ...focusState };
+  const mode = focusModes.find(m => m.id === session.modeId);
+  // 暂停态：end_time 已非真实结束时刻，改传"冻结的剩余毫秒"；
+  // 设备端识别 paused=true 时直接读 remaining_ms 显示，不再用 end_time 计算。
+  let endTimeISO;
+  let remainingMs = null;
+  if (session.paused) {
+    endTimeISO = new Date().toISOString();          // 占位，无实际意义
+    remainingMs = Math.max(0, Math.round(session.remainingMs));
+  } else {
+    endTimeISO = new Date(session.endTime).toISOString();
+  }
+  return queueFocusSync(async () => {
+    try {
+      const { error } = await sb.rpc('upsert_focus_session', {
+        p_mode_id: session.modeId,
+        p_mode_name: mode ? mode.name : '',
+        p_phase: session.phase,
+        p_cycle: session.cycle,
+        p_total_cycles: session.totalCycles,
+        p_phase_ms: Math.round(session.phaseMs),
+        p_end_time: endTimeISO,
+        p_paused: !!session.paused,
+        p_remaining_ms: remainingMs,
+      });
+      if (error) throw new Error(error.message || JSON.stringify(error));
+    } catch (e) {
+      console.warn('pushFocusSession:', e && e.message ? e.message : e);
+    }
+  });
+}
+
+async function clearFocusSession() {
+  if (!sb || !isLoggedIn()) return Promise.resolve();
+  return queueFocusSync(async () => {
+    try {
+      const { error } = await sb.rpc('clear_focus_session');
+      if (error) throw new Error(error.message || JSON.stringify(error));
+    } catch (e) {
+      console.warn('clearFocusSession:', e && e.message ? e.message : e);
+    }
+  });
 }
 
 function ensureAudio() {
