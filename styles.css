@@ -31,6 +31,22 @@ html, body {
 }
 .lang-btn:hover { background: #3A7BF9; color: #fff; }
 
+/* 图标小按钮（独立于 lang-btn，避免被 i18n 覆盖文字） */
+.icon-btn {
+  min-width: 34px;
+  padding: 3px 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #3A7BF9;
+  background: #eef4ff;
+  border: 1px solid #dbe7ff;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+  flex-shrink: 0;
+}
+.icon-btn:hover { background: #3A7BF9; color: #fff; }
+
 /* 全局解锁状态按钮（顶部常驻） */
 .lock-toggle {
   display: inline-flex;
