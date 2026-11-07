@@ -82,14 +82,14 @@
   <div class="main-content flex flex-col min-h-screen">
 
     <!-- 移动端顶部栏 -->
-    <header class="lg:hidden sticky top-0 z-30 bg-white border-b border-gray-200 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+    <header class="lg:hidden sticky top-0 z-30 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between" style="flex-wrap:wrap;row-gap:8px">
       <h1 class="text-lg font-bold text-primary">📅 <span data-i18n="app_title">课表</span></h1>
-      <div class="flex items-center gap-2 flex-wrap">
+      <div class="flex items-center gap-2" style="flex-wrap:wrap;row-gap:8px">
         <button id="btn-auth-toggle-mobile" class="lock-toggle" data-i18n="auth_login">👤 登录</button>
         <button id="btn-pair-device-mobile" class="lang-btn" title="绑定墨水屏">📱</button>
         <button id="lang-toggle-mobile" class="lang-btn">EN</button>
         <button id="eink-toggle-mobile" class="eink-toggle" data-i18n="eink_short" title="切换黑白墨水屏模式">墨水</button>
-        <select id="semester-select-mobile" class="rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:outline-none max-w-[52vw] truncate"></select>
+        <select id="semester-select-mobile" class="rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:outline-none" style="max-width:180px"></select>
       </div>
     </header>
 
