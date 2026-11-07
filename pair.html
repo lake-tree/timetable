@@ -102,6 +102,21 @@
       display: flex; align-items: center; justify-content: center;
       font-size: 28px; margin: 0 auto 14px;
     }
+    input.pin {
+      text-align: center;
+      font: 700 22px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: 5px;
+      text-transform: uppercase;
+      padding: 15px 12px;
+    }
+    #scanVideo {
+      width: 100%;
+      max-height: 260px;
+      object-fit: cover;
+      border-radius: 12px;
+      background: #000;
+      margin-top: 12px;
+    }
     .hidden { display: none !important; }
   </style>
 </head>
@@ -118,9 +133,6 @@
     const cfg = window.APP_CONFIG || {};
     const sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
 
-    const params = new URLSearchParams(location.search);
-    const code = (params.get('code') || '').trim().toUpperCase();
-
     const stepEl = document.getElementById('step');
     const msgEl = document.getElementById('msg');
     const codeEl = document.getElementById('codeLabel');
@@ -128,23 +140,164 @@
 
     let session = null;
 
+    // 兼容三种来源：?code=XXX、#pair=XXX、以及手动输入/扫到的完整链接
+    function normalizeCode(raw) {
+      const s = String(raw || '').toUpperCase();
+      const m = s.match(/[?&#](?:code|pair)=([A-Z0-9]{6,12})/);
+      if (m) return m[1];
+      return s.replace(/[^A-Z0-9]/g, '').slice(0, 8);
+    }
+
+    let code = normalizeCode(
+      new URLSearchParams(location.search).get('code') ||
+      new URLSearchParams(location.search).get('pair') ||
+      location.hash.replace(/^#(?:pair=)?/, '')
+    );
+
     function setMsg(text, kind) {
       msgEl.textContent = text || '';
       msgEl.className = 'msg' + (kind ? ' ' + kind : '');
     }
 
+    function showCode() {
+      codeEl.classList.remove('hidden');
+      codeEl.textContent = code.slice(0, 4) + ' ' + code.slice(4);
+    }
+
     function boot() {
-      if (!code || code.length < 6) {
-        codeEl.classList.add('hidden');
-        stepEl.innerHTML = '<p class="sub">链接里没有配对码，请重新扫描设备上的二维码。</p>';
+      if (!code || code.length !== 8) {
+        renderCodeInput();
         return;
       }
-      codeEl.textContent = code.slice(0, 4) + ' ' + code.slice(4);
+      showCode();
       sb.auth.getSession().then(({ data }) => {
         session = (data && data.session) || null;
         render();
       });
     }
+
+    // 没有配对码时（直接打开本页 / 从网页入口进来没带码）提供手动输入与扫码
+    function renderCodeInput() {
+      codeEl.classList.add('hidden');
+      subEl.textContent = '输入墨水屏「今日」页上显示的 8 位配对码。';
+      stepEl.innerHTML = `
+        <label for="pc">配对码</label>
+        <input id="pc" class="pin" type="text" inputmode="latin" autocomplete="off"
+               autocapitalize="characters" spellcheck="false" maxlength="9" placeholder="ABCD 2345" />
+        <button id="btnNext">继续</button>
+        <button id="btnScan" class="ghost">📷 扫设备上的二维码</button>
+        <div id="scanBox" class="hidden"><video id="scanVideo" playsinline muted></video></div>
+        <p class="hint">配对码 10 分钟内有效。过期了回到设备重新进入「今日」页即可刷新。</p>
+      `;
+
+      const input = document.getElementById('pc');
+      input.addEventListener('input', () => {
+        const v = normalizeCode(input.value);
+        input.value = v.length > 4 ? v.slice(0, 4) + ' ' + v.slice(4) : v;
+      });
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); go(); }
+      });
+
+      function go() {
+        const v = normalizeCode(input.value);
+        if (v.length !== 8) { setMsg('配对码是 8 位', 'err'); return; }
+        setMsg('');
+        code = v;
+        showCode();
+        sb.auth.getSession().then(({ data }) => {
+          session = (data && data.session) || null;
+          render();
+        });
+      }
+
+      document.getElementById('btnNext').onclick = go;
+      document.getElementById('btnScan').onclick = startScan;
+      setTimeout(() => { try { input.focus(); } catch (e) {} }, 150);
+    }
+
+    /* --- 扫码（jsQR 按需加载，不拖慢首屏） --- */
+    let scanStream = null;
+    let scanTimer = 0;
+
+    function stopScan() {
+      if (scanTimer) { clearInterval(scanTimer); scanTimer = 0; }
+      if (scanStream) {
+        scanStream.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
+        scanStream = null;
+      }
+      const v = document.getElementById('scanVideo');
+      if (v) { try { v.srcObject = null; } catch (e) {} }
+      const box = document.getElementById('scanBox');
+      if (box) box.classList.add('hidden');
+    }
+
+    function loadJsQR() {
+      if (window.jsQR) return Promise.resolve(window.jsQR);
+      return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
+        s.onload = () => resolve(window.jsQR);
+        s.onerror = () => reject(new Error('扫码组件加载失败'));
+        document.head.appendChild(s);
+      });
+    }
+
+    async function startScan() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setMsg('此浏览器不支持调用摄像头，请手动输入配对码', 'err');
+        return;
+      }
+      let decode;
+      try {
+        const jsQR = await loadJsQR();
+        decode = (canvas) => {
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const r = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
+          return r ? r.data : null;
+        };
+      } catch (e) {
+        setMsg('扫码组件加载失败，请手动输入配对码', 'err');
+        return;
+      }
+
+      try {
+        scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+      } catch (e) {
+        setMsg('无法打开摄像头，请检查权限或手动输入', 'err');
+        return;
+      }
+
+      const video = document.getElementById('scanVideo');
+      const box = document.getElementById('scanBox');
+      video.srcObject = scanStream;
+      box.classList.remove('hidden');
+      try { await video.play(); } catch (e) {}
+
+      const canvas = document.createElement('canvas');
+      scanTimer = setInterval(() => {
+        if (!video.videoWidth) return;
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d', { willReadFrequently: true }).drawImage(video, 0, 0, canvas.width, canvas.height);
+        const text = decode(canvas);
+        if (!text) return;
+        const v = normalizeCode(text);
+        if (v.length !== 8) return;
+        stopScan();
+        code = v;
+        showCode();
+        setMsg('');
+        sb.auth.getSession().then(({ data }) => {
+          session = (data && data.session) || null;
+          render();
+        });
+      }, 350);
+    }
+
+    window.addEventListener('pagehide', stopScan);
+  </script>
 
     function render() {
       if (!session) {
@@ -155,7 +308,7 @@
     }
 
     function renderLogin() {
-      subEl.textContent = '扫码成功。请先登录，再确认把该账户绑定到设备。';
+      subEl.textContent = '请先登录，再确认把该账户绑定到设备。';
       stepEl.innerHTML = `
         <label for="email">邮箱</label>
         <input id="email" type="email" autocomplete="username" placeholder="you@example.com" />

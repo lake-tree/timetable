@@ -54,6 +54,7 @@
       <button id="btn-add" class="w-full rounded-lg bg-primary text-white py-2.5 text-sm font-medium hover:bg-[#2f6be0] transition" data-i18n="add_course">＋ 添加课程</button>
       <button id="btn-manage-semesters" class="w-full rounded-lg border border-gray-200 bg-white py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition" data-i18n="manage_semesters">学期管理</button>
       <button id="btn-links" class="w-full rounded-lg border border-gray-200 bg-white py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition" data-i18n="links_title">🔗 网站跳转</button>
+      <button id="btn-pair-device" class="w-full rounded-lg border border-gray-200 bg-white py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">📱 绑定墨水屏</button>
     </div>
 
     <div class="px-6 mt-4 flex-1 overflow-y-auto">
@@ -85,6 +86,7 @@
       <h1 class="text-lg font-bold text-primary">📅 <span data-i18n="app_title">课表</span></h1>
       <div class="flex items-center gap-2">
         <button id="btn-auth-toggle-mobile" class="lock-toggle" data-i18n="auth_login">👤 登录</button>
+        <button id="btn-pair-device-mobile" class="lang-btn" title="绑定墨水屏">📱</button>
         <button id="lang-toggle-mobile" class="lang-btn">EN</button>
         <button id="eink-toggle-mobile" class="eink-toggle" data-i18n="eink_short" title="切换黑白墨水屏模式">墨水</button>
         <select id="semester-select-mobile" class="rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:outline-none"></select>
@@ -424,6 +426,39 @@
     </div>
   </div>
 
+  <!-- ======================= 绑定墨水屏弹窗 ======================= -->
+  <div id="modal-pair" class="modal hidden">
+    <div class="modal-mask" data-close="modal-pair"></div>
+    <div class="modal-panel">
+      <div class="flex items-start justify-between mb-1">
+        <h3 class="text-lg font-bold text-gray-900">📱 绑定墨水屏</h3>
+        <button data-close="modal-pair" class="modal-close">✕</button>
+      </div>
+      <p class="text-sm text-gray-500 mb-4 leading-relaxed">
+        在墨水屏「今日」页会显示 8 位配对码和二维码。输入配对码，或直接扫设备上的二维码。
+      </p>
+
+      <label class="form-label">配对码</label>
+      <input id="pair-code-input" type="text" inputmode="latin" autocomplete="off" autocapitalize="characters"
+        spellcheck="false" maxlength="9" placeholder="ABCD 2345"
+        class="form-input text-center font-mono tracking-[0.35em] text-lg uppercase" />
+
+      <div id="pair-scan-box" class="hidden mt-3">
+        <video id="pair-scan-video" playsinline muted class="w-full rounded-lg bg-black" style="max-height:260px;object-fit:cover"></video>
+        <p class="text-xs text-gray-400 mt-2 text-center">把设备屏幕上的二维码放进取景框内</p>
+      </div>
+
+      <div class="flex gap-3 mt-4">
+        <button id="btn-pair-confirm" class="flex-1 rounded-lg bg-primary text-white py-2.5 text-sm font-medium hover:bg-[#2f6be0] transition">下一步</button>
+        <button id="btn-pair-scan" class="rounded-lg border border-gray-200 bg-white py-2.5 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">📷 扫码</button>
+      </div>
+
+      <p class="text-xs text-gray-400 mt-3 leading-relaxed">
+        绑定的是当前登录账户。若尚未登录，下一步会先提示登录。
+      </p>
+    </div>
+  </div>
+
   <!-- ======================= 专注阶段结束提示弹窗 ======================= -->
   <div id="modal-focus-alert" class="modal hidden">
     <div class="modal-mask" data-close="modal-focus-alert"></div>
@@ -441,6 +476,6 @@
   <!-- Supabase JS 客户端（CDN 引入） -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
-  <script src="app.js"></script>
+  <script src="app.js?v=20261107b"></script>
 </body>
 </html>

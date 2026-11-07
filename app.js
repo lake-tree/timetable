@@ -1425,17 +1425,169 @@ function subscribeRealtime() {
     });
 }
 
+/* ---------- 绑定墨水屏（配对码 / 扫码） ---------- */
+// 配对码 8 位，设备端去掉了易混淆的 0/O/1/I
+function normalizePairCode(raw) {
+  const s = String(raw || '').toUpperCase();
+  // 允许直接粘贴设备二维码里的完整链接：#pair=XXXXXXXX 或 ?code=XXXXXXXX
+  const m = s.match(/[?&#](?:code|pair)=([A-Z0-9]{6,12})/);
+  if (m) return m[1];
+  return s.replace(/[^A-Z0-9]/g, '').slice(0, 8);
+}
+
+function openPairModal() {
+  const input = document.getElementById('pair-code-input');
+  if (input) input.value = '';
+  openModal('modal-pair');
+  if (input) setTimeout(() => { try { input.focus(); } catch (e) {} }, 120);
+}
+
+function closePairModal() {
+  stopPairScan();
+  closeModal('modal-pair');
+}
+
+function submitPairCode() {
+  const input = document.getElementById('pair-code-input');
+  const code = normalizePairCode(input ? input.value : '');
+  if (code.length !== 8) {
+    showToast('配对码是 8 位，请对照设备屏幕再输一次');
+    if (input) input.focus();
+    return;
+  }
+  stopPairScan();
+  // 带上配对码跳到确认页：已登录会直接显示「确认绑定」
+  location.href = 'pair.html?code=' + encodeURIComponent(code);
+}
+
+let pairScanStream = null;
+let pairScanTimer = 0;
+
+function stopPairScan() {
+  if (pairScanTimer) { clearInterval(pairScanTimer); pairScanTimer = 0; }
+  if (pairScanStream) {
+    pairScanStream.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
+    pairScanStream = null;
+  }
+  const box = document.getElementById('pair-scan-box');
+  const video = document.getElementById('pair-scan-video');
+  if (video) { try { video.srcObject = null; } catch (e) {} }
+  if (box) box.classList.add('hidden');
+}
+
+async function loadJsQR() {
+  if (window.jsQR) return window.jsQR;
+  await new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('扫码组件加载失败'));
+    document.head.appendChild(s);
+  });
+  return window.jsQR;
+}
+
+async function startPairScan() {
+  const box = document.getElementById('pair-scan-box');
+  const video = document.getElementById('pair-scan-video');
+  if (!box || !video) return;
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showToast('当前浏览器不支持调用摄像头，请手动输入配对码');
+    return;
+  }
+
+  let decode = null;
+  try {
+    const jsQR = await loadJsQR();
+    decode = (canvas) => {
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const res = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
+      return res ? res.data : null;
+    };
+  } catch (e) {
+    showToast('扫码组件加载失败，请手动输入配对码');
+    return;
+  }
+
+  try {
+    pairScanStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment' }, audio: false,
+    });
+  } catch (e) {
+    showToast('无法打开摄像头，请检查权限或手动输入配对码');
+    return;
+  }
+
+  video.srcObject = pairScanStream;
+  box.classList.remove('hidden');
+  try { await video.play(); } catch (e) {}
+
+  const canvas = document.createElement('canvas');
+  pairScanTimer = setInterval(() => {
+    if (!video.videoWidth) return;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const text = decode(canvas);
+    if (!text) return;
+    const code = normalizePairCode(text);
+    if (code.length === 8) {
+      stopPairScan();
+      const input = document.getElementById('pair-code-input');
+      if (input) input.value = code;
+      submitPairCode();
+    }
+  }, 350);
+}
+
 /* ---------- 事件绑定 ---------- */
 function bindEvents() {
   // 弹窗关闭：遮罩 / 关闭按钮 / ESC
   document.querySelectorAll('[data-close]').forEach(el => {
-    el.addEventListener('click', () => closeModal(el.getAttribute('data-close')));
+    el.addEventListener('click', () => {
+      const id = el.getAttribute('data-close');
+      if (id === 'modal-pair') stopPairScan();
+      closeModal(id);
+    });
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
+      stopPairScan();
       document.querySelectorAll('.modal:not(.hidden)').forEach(m => m.classList.add('hidden'));
     }
   });
+
+  // 绑定墨水屏
+  const pairTriggers = ['btn-pair-device', 'btn-pair-device-mobile'];
+  pairTriggers.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('click', openPairModal);
+  });
+  const pairInput = document.getElementById('pair-code-input');
+  if (pairInput) {
+    // 只保留字母数字、自动大写、两段式显示
+    pairInput.addEventListener('input', () => {
+      const raw = pairInput.value;
+      const code = normalizePairCode(raw);
+      pairInput.value = code.length > 4 ? code.slice(0, 4) + ' ' + code.slice(4) : code;
+    });
+    pairInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); submitPairCode(); }
+    });
+  }
+  const btnPairConfirm = document.getElementById('btn-pair-confirm');
+  if (btnPairConfirm) btnPairConfirm.addEventListener('click', submitPairCode);
+  const btnPairScan = document.getElementById('btn-pair-scan');
+  if (btnPairScan) {
+    btnPairScan.addEventListener('click', () => {
+      const box = document.getElementById('pair-scan-box');
+      if (box && !box.classList.contains('hidden')) { stopPairScan(); return; }
+      startPairScan();
+    });
+  }
 
   // 桌面 / 移动端课程卡片点击 → 详情
   document.getElementById('desktop-grid').addEventListener('click', (e) => {
